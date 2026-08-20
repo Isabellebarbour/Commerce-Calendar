@@ -3400,6 +3400,10 @@ body.is-app #landing {
   border: 1px solid #c5c5c5;
 }
 
+.grades-scroll-hint {
+  display: none;
+}
+
 .grades-table {
   width: 100%;
   min-width: 760px;
@@ -3699,6 +3703,151 @@ body.is-app #landing {
 
   body.is-nav-open .nav-backdrop[hidden] {
     display: block;
+  }
+
+  /* No page-level horizontal scroll; nested panes may still scroll intentionally. */
+  .app-shell,
+  .shell,
+  .main,
+  .page {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  #page-home {
+    align-items: stretch;
+    padding: 0 16px;
+  }
+
+  .home-cards {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    align-self: stretch;
+    gap: 16px;
+    width: 100%;
+    max-width: 100%;
+    padding: 20px 0 32px;
+  }
+
+  .home-card {
+    width: 100%;
+    height: auto;
+    min-height: 280px;
+    padding: 22px 20px 18px;
+  }
+
+  .home-card-body {
+    padding-top: 28px;
+  }
+
+  .profile-progress {
+    margin: 12px 16px 24px;
+    padding: 16px;
+  }
+
+  .profile-years {
+    grid-template-columns: 1fr;
+  }
+
+  .cal-toolbar {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 8px 10px;
+    padding: 10px 12px 8px;
+  }
+
+  .cal-toolbar-right {
+    order: -1;
+    width: 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .cal-toolbar-left {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .cal-title {
+    font-size: 16px;
+  }
+
+  .cal-topics-toggle {
+    display: none !important;
+  }
+
+  .cal-main .cal-topics,
+  .cal-main.is-topics-collapsed .cal-topics {
+    width: 0 !important;
+    min-width: 0 !important;
+    padding: 0 !important;
+    border-right-width: 0 !important;
+    opacity: 0 !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
+  }
+
+  .cal-views button {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+
+  .cal-body,
+  .cal-scroll,
+  .cal-week,
+  .cal-day,
+  .cal-month {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .curr-row {
+    grid-template-columns: minmax(0, 1fr) minmax(108px, 120px);
+    gap: 8px;
+  }
+
+  .curr-row.is-group {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .curr-name,
+  .curr-units,
+  .curr-input-name {
+    display: none !important;
+  }
+
+  .curr-input-code {
+    grid-column: 1;
+  }
+
+  .grades {
+    padding: 16px 12px 28px;
+  }
+
+  .grades-scroll-hint {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    margin: 0 0 8px;
+    color: #5c5c5c;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .grades-table-wrap {
+    position: relative;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    background:
+      linear-gradient(to right, #fff 30%, rgba(255, 255, 255, 0)) left center / 28px 100% no-repeat local,
+      linear-gradient(to left, #fff 30%, rgba(255, 255, 255, 0)) right center / 36px 100% no-repeat local,
+      radial-gradient(farthest-side at right, rgba(0, 0, 0, 0.18), transparent) right center / 14px 100% no-repeat local;
+    background-attachment: local, local, scroll;
   }
 }
 

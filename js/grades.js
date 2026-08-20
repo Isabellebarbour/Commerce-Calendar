@@ -867,7 +867,8 @@ function tableForCourses(courses, heading) {
   return `
     <section class="grades-section">
       ${heading ? `<h2 class="grades-section-title">${escapeGrades(heading)}</h2>` : ""}
-      <div class="grades-table-wrap">
+      <p class="grades-scroll-hint">Swipe sideways to see all columns →</p>
+      <div class="grades-table-wrap" tabindex="0" aria-label="Grades table, scroll sideways for more columns">
         <table class="grades-table">
           <thead>
             <tr>

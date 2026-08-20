@@ -21,12 +21,16 @@ const TOPICS_COLLAPSE_KEY = "comcal-cal-topics-collapsed";
 
 const HOUR_HEIGHT = 56;
 
+function isMobileLayout() {
+  return window.matchMedia("(max-width: 860px)").matches;
+}
+
 const calState = {
-  view: "week",
+  view: isMobileLayout() ? "day" : "week",
   cursor: startOfDay(new Date()),
   miniMonth: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   events: window.ComCalSchedule.allEvents(),
-  topicsCollapsed: localStorage.getItem(TOPICS_COLLAPSE_KEY) === "1",
+  topicsCollapsed: isMobileLayout() || localStorage.getItem(TOPICS_COLLAPSE_KEY) === "1",
 };
 
 function startOfDay(date) {
@@ -483,6 +487,7 @@ function shiftCursor(step) {
 }
 
 viewButtons.forEach((button) => {
+  button.classList.toggle("is-active", button.dataset.calView === calState.view);
   button.addEventListener("click", () => setView(button.dataset.calView));
 });
 
@@ -985,7 +990,7 @@ function renderTopics() {
 function applyTopicsCollapsed() {
   const main = document.querySelector(".cal-main");
   const toggle = document.getElementById("cal-topics-toggle");
-  const collapsed = !!calState.topicsCollapsed;
+  const collapsed = isMobileLayout() ? true : !!calState.topicsCollapsed;
   main?.classList.toggle("is-topics-collapsed", collapsed);
   if (toggle) {
     toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
@@ -997,6 +1002,21 @@ function applyTopicsCollapsed() {
   }
 }
 
+function ensureMobileDefaults() {
+  if (!isMobileLayout()) {
+    applyTopicsCollapsed();
+    return;
+  }
+  calState.topicsCollapsed = true;
+  applyTopicsCollapsed();
+  if (calState.view !== "day" && !ensureMobileDefaults._opened) {
+    ensureMobileDefaults._opened = true;
+    setView("day");
+    return;
+  }
+  ensureMobileDefaults._opened = true;
+}
+
 function toggleTopicsCollapsed() {
   calState.topicsCollapsed = !calState.topicsCollapsed;
   localStorage.setItem(TOPICS_COLLAPSE_KEY, calState.topicsCollapsed ? "1" : "0");
@@ -1006,6 +1026,12 @@ function toggleTopicsCollapsed() {
 const topicsRoot = document.getElementById("cal-topics");
 document.getElementById("cal-topics-toggle")?.addEventListener("click", toggleTopicsCollapsed);
 applyTopicsCollapsed();
+window.addEventListener("resize", () => {
+  if (isMobileLayout()) {
+    calState.topicsCollapsed = true;
+  }
+  applyTopicsCollapsed();
+});
 topicsRoot.addEventListener("click", (event) => {
   const miniDate = event.target.closest("[data-mini-date]");
   if (miniDate) {
@@ -1509,4 +1535,5 @@ setInterval(() => {
 
 window.ComCalCalendar = {
   reload: reloadEvents,
+  ensureMobileDefaults,
 };

@@ -16,6 +16,7 @@ function showPage(pageId) {
   closeMobileNav();
 
   if (pageId === "calendar") {
+    window.ComCalCalendar?.ensureMobileDefaults?.();
     window.ComCalCalendar?.reload();
   }
   if (pageId === "assignments") {
