@@ -59,6 +59,21 @@ body.is-app #landing {
   display: none !important;
 }
 
+/* Already signed in: show the app immediately while Firebase restores the session. */
+html.has-session body.is-landing {
+  overflow: hidden;
+  height: 100%;
+}
+
+html.has-session body.is-landing #landing {
+  display: none !important;
+}
+
+html.has-session body.is-landing #app-shell,
+html.has-session body.is-landing #app-shell[hidden] {
+  display: flex !important;
+}
+
 .app-shell {
   display: flex;
   flex-direction: column;

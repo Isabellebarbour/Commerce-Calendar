@@ -230,6 +230,12 @@ function refreshAuthGate() {
     applySessionToProfile(session);
     showApp();
   } else {
+    try {
+      localStorage.removeItem("comcal-expect-session");
+    } catch {
+      /* ignore */
+    }
+    document.documentElement.classList.remove("has-session");
     showLanding();
   }
 }

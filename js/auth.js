@@ -59,6 +59,20 @@ function sessionFromUser(user, meta = {}) {
   };
 }
 
+function setExpectSession(on) {
+  try {
+    if (on) {
+      localStorage.setItem("comcal-expect-session", "1");
+      document.documentElement.classList.add("has-session");
+    } else {
+      localStorage.removeItem("comcal-expect-session");
+      document.documentElement.classList.remove("has-session");
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 function setCachedSession(session) {
   cachedSession = session;
   if (session) {
@@ -69,6 +83,7 @@ function setCachedSession(session) {
       firstName: session.firstName || "",
       lastName: session.lastName || "",
     });
+    setExpectSession(true);
   }
 }
 
@@ -199,6 +214,7 @@ async function logOut() {
   }
   setCachedSession(null);
   saveMeta(null);
+  setExpectSession(false);
   window.ComCalCloud?.clearLocalUserData?.();
 }
 
