@@ -181,19 +181,43 @@ function monthEventsHtml(day) {
 function timedEventHtml(event) {
   const start = new Date(event.start);
   const end = new Date(event.end);
-  const startMin = event.allDay ? 0 : start.getHours() * 60 + start.getMinutes();
-  const endMin = event.allDay ? 40 : end.getHours() * 60 + end.getMinutes();
+  const startMin = start.getHours() * 60 + start.getMinutes();
+  const endMin = end.getHours() * 60 + end.getMinutes();
   const top = (startMin / 60) * HOUR_HEIGHT;
-  const height = Math.max(((endMin - startMin) / 60) * HOUR_HEIGHT, 22);
+  const height = Math.max(((Math.max(endMin, startMin + 30) - startMin) / 60) * HOUR_HEIGHT, 22);
   const title = event.source === "assignment" ? event.title : eventChipLabel(event);
   const subtitle =
     event.source === "assignment"
       ? event.location || event.courseCode || ""
-      : event.location || (event.allDay ? "All day" : "");
+      : event.location || "";
   return `<button type="button" class="cal-event${eventStripeClass(event)}" data-event-id="${escapeCal(event.id)}" style="top:${top}px;height:${height}px;${eventStyleVars(event)}" title="${escapeCal(event.description || event.title)}">
     <strong>${escapeCal(title)}</strong>
     ${subtitle ? `<span>${escapeCal(subtitle)}</span>` : ""}
   </button>`;
+}
+
+function isAllDayCalendarEvent(event) {
+  if (!event) return false;
+  if (event.allDay) return true;
+  if (event.source === "academic") return true;
+  if (event.source === "assignment") return true;
+  return false;
+}
+
+function allDayEventHtml(event) {
+  const title = event.source === "assignment" ? event.title : eventChipLabel(event);
+  const subtitle =
+    event.source === "assignment"
+      ? event.location || event.courseCode || "All day"
+      : event.location || "All day";
+  return `<button type="button" class="cal-allday-event${eventStripeClass(event)}" data-event-id="${escapeCal(event.id)}" style="${eventStyleVars(event)}" title="${escapeCal(event.description || event.title)}">
+    <strong>${escapeCal(title)}</strong>
+    ${subtitle ? `<span>${escapeCal(subtitle)}</span>` : ""}
+  </button>`;
+}
+
+function eventsForDay(day) {
+  return window.ComCalSchedule.eventsOnDay(visibleCalendarEvents(), day);
 }
 
 function renderTitle() {
@@ -269,12 +293,29 @@ function dayColumn(day, today) {
         now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
       )}</span></div>`
     : "";
-  const events = window.ComCalSchedule
-    .eventsOnDay(visibleCalendarEvents(), day)
+  const events = eventsForDay(day)
+    .filter((event) => !isAllDayCalendarEvent(event))
     .map(timedEventHtml)
     .join("");
 
   return `<div class="cal-col">${slots}${events}${nowLine}</div>`;
+}
+
+function allDayColumn(day) {
+  const items = eventsForDay(day).filter(isAllDayCalendarEvent);
+  if (!items.length) {
+    return `<div class="cal-allday-col" aria-hidden="true"></div>`;
+  }
+  return `<div class="cal-allday-col">${items.map(allDayEventHtml).join("")}</div>`;
+}
+
+function allDayRow(days) {
+  const hasAny = days.some((day) => eventsForDay(day).some(isAllDayCalendarEvent));
+  if (!hasAny) return "";
+  return `<div class="cal-allday-row" aria-label="All-day events">
+    <div class="cal-allday-gutter"><span>All day</span></div>
+    ${days.map(allDayColumn).join("")}
+  </div>`;
 }
 
 function headDay(day, today) {
@@ -302,6 +343,7 @@ function renderWeek() {
         <div class="cal-head-gutter"></div>
         ${days.map((day) => headDay(day, today)).join("")}
       </div>
+      ${allDayRow(days)}
       <div class="cal-scroll">
         <div class="cal-time-grid">
           <div class="cal-hours">${hourLabels()}</div>
@@ -319,6 +361,7 @@ function renderWeek() {
 function renderDay() {
   const today = startOfDay(new Date());
   const day = calState.cursor;
+  const days = [day];
 
   calBody.innerHTML = `
     <div class="cal-day">
@@ -326,6 +369,7 @@ function renderDay() {
         <div class="cal-head-gutter"></div>
         ${headDay(day, today)}
       </div>
+      ${allDayRow(days)}
       <div class="cal-scroll">
         <div class="cal-time-grid">
           <div class="cal-hours">${hourLabels()}</div>

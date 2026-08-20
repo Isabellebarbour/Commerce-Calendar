@@ -1470,6 +1470,93 @@ body.is-app #landing {
   grid-template-columns: 72px 1fr;
 }
 
+.cal-allday-row {
+  display: grid;
+  flex-shrink: 0;
+  grid-template-columns: 72px repeat(7, 1fr);
+  border-bottom: 1px solid #ebebeb;
+  background: #fafafa;
+  max-height: 120px;
+  overflow: auto;
+}
+
+.cal-day .cal-allday-row {
+  grid-template-columns: 72px 1fr;
+}
+
+.cal-allday-gutter {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 8px 8px 6px 0;
+  border-right: 1px solid #ebebeb;
+}
+
+.cal-allday-gutter span {
+  color: #8e8e93;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.2;
+  text-align: right;
+}
+
+.cal-allday-col {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-height: 28px;
+  padding: 4px;
+  border-right: 1px solid #ebebeb;
+}
+
+.cal-allday-col:last-child {
+  border-right: 0;
+}
+
+.cal-allday-event {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  padding: 4px 7px 4px 8px;
+  border: 0;
+  border-left: 3.5px solid var(--event, var(--navy));
+  border-radius: 7px;
+  background: var(--event-bg, #dce6f8);
+  color: var(--event, var(--navy));
+  font-size: 11px;
+  line-height: 1.25;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cal-allday-event.is-striped {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--event-bg, #dce6f8),
+    var(--event-bg, #dce6f8) 4px,
+    rgba(255, 255, 255, 0.62) 4px,
+    rgba(255, 255, 255, 0.62) 8px
+  );
+}
+
+.cal-allday-event strong,
+.cal-allday-event span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cal-allday-event strong {
+  font-weight: 600;
+}
+
+.cal-allday-event span {
+  opacity: 0.88;
+  font-weight: 400;
+  font-size: 10px;
+}
+
 .cal-head-gutter {
   border-right: 1px solid #ebebeb;
 }
