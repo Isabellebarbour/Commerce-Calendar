@@ -77,10 +77,11 @@ function upscaleImage(image) {
 function isClassFill(r, g, b) {
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
-  if (max < 130 || min > 250 || max - min < 12) return false;
-  // SOLUS week view uses mint/green class tiles
-  if (g > r + 6 && g > b + 4 && g > 145) return true;
-  if (b > r + 8 && b >= g - 12 && b > 160 && r > 120) return true;
+  if (max < 120 || min > 252) return false;
+  // SOLUS mint/green tiles (allow JPEG washout)
+  if (g >= r && g >= b - 8 && g > 130 && g - Math.min(r, b) >= 8) return true;
+  if (g > r + 4 && g > b + 2 && g > 125) return true;
+  if (b > r + 8 && b >= g - 12 && b > 150 && r > 100) return true;
   return false;
 }
 
@@ -147,7 +148,7 @@ function findClassBlocks(canvas) {
   return boxes;
 }
 
-function cropCanvas(source, box, pad = 6) {
+function cropCanvas(source, box, pad = 6, { binarize = false } = {}) {
   const x0 = Math.max(0, Math.floor(box.x0 - pad));
   const y0 = Math.max(0, Math.floor(box.y0 - pad));
   const x1 = Math.min(source.width, Math.ceil(box.x1 + pad));
@@ -159,11 +160,12 @@ function cropCanvas(source, box, pad = 6) {
   ctx.fillStyle = "#fff";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(source, x0, y0, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
+  if (!binarize) return canvas;
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const data = imageData.data;
   for (let i = 0; i < data.length; i += 4) {
     const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-    const value = gray < 150 ? 0 : 255;
+    const value = gray < 165 ? 0 : 255;
     data[i] = data[i + 1] = data[i + 2] = value;
   }
   ctx.putImageData(imageData, 0, 0);
@@ -302,9 +304,16 @@ async function recognizeImage(file, onProgress) {
 
   const worker = await Tesseract.createWorker("eng");
   try {
+    // Always OCR the full week grid so we can recover if color-block crops fail.
+    const fullResult = await worker.recognize(image);
+    const fullText = fullResult.data.text || "";
+    const fullWords = fullResult.data.words || [];
+
     let headerText = "";
     let headerWords = [];
-    const headerBottom = blocks.length ? Math.min(...blocks.map((block) => block.y0)) : Math.round(image.height * 0.18);
+    const headerBottom = blocks.length
+      ? Math.min(...blocks.map((block) => block.y0))
+      : Math.round(image.height * 0.2);
     if (headerBottom > 20) {
       const header = cropCanvas(image, { x0: 0, y0: 0, x1: image.width, y1: headerBottom }, 0);
       const headerResult = await worker.recognize(header);
@@ -312,47 +321,126 @@ async function recognizeImage(file, onProgress) {
       headerWords = headerResult.data.words || [];
     }
 
-    const dayHeaders = resolveSolusDayHeaders(image.width, headerWords);
+    const dayHeaders = resolveSolusDayHeaders(image.width, headerWords.length ? headerWords : fullWords);
     const blockTemplates = [];
 
     for (let index = 0; index < blocks.length; index += 1) {
       onProgress?.(`Reading class ${index + 1} of ${blocks.length}…`);
-      const crop = cropCanvas(image, blocks[index], 10);
-      const result = await worker.recognize(crop);
-      const text = `${result.data.text || ""}`;
-      const meetings = window.ComCalSchedule.extractSolusMeetings(text);
-      const codes = window.ComCalSchedule.extractCourseCodes(text);
-      const times = meetings[0]
-        ? { startMinutes: meetings[0].startMinutes, endMinutes: meetings[0].endMinutes }
-        : window.ComCalSchedule.parseTimeRange(text);
-      const title = cleanImportedTitle(meetings[0]?.title || codes[0] || "");
-      if (!title || !times) continue;
-      const weekday = weekdayForSolusX(blocks[index].cx, dayHeaders);
-      if (weekday == null) continue;
-      blockTemplates.push({
-        weekday,
-        startMinutes: times.startMinutes,
-        endMinutes: times.endMinutes,
-        title: meetings[0]?.activity ? `${title} ${meetings[0].activity}` : title,
-        location: meetings[0]?.location || window.ComCalSchedule.parseLocation(text),
-        description: meetings[0]?.activity || "",
-        professor: "",
-      });
+      const soft = cropCanvas(image, blocks[index], 12, { binarize: false });
+      const hard = cropCanvas(image, blocks[index], 12, { binarize: true });
+      let text = "";
+      for (const crop of [soft, hard]) {
+        const result = await worker.recognize(crop);
+        text = `${result.data.text || ""}`;
+        const meetings = window.ComCalSchedule.extractSolusMeetings(text);
+        const codes = window.ComCalSchedule.extractCourseCodes(text);
+        const times = meetings[0]
+          ? { startMinutes: meetings[0].startMinutes, endMinutes: meetings[0].endMinutes }
+          : window.ComCalSchedule.parseTimeRange(text);
+        const title = cleanImportedTitle(meetings[0]?.title || codes[0] || "");
+        if (!title || !times) continue;
+        const weekday = weekdayForSolusX(blocks[index].cx, dayHeaders);
+        if (weekday == null) continue;
+        blockTemplates.push({
+          weekday,
+          startMinutes: times.startMinutes,
+          endMinutes: times.endMinutes,
+          title: meetings[0]?.activity ? `${title} ${meetings[0].activity}` : title,
+          location: meetings[0]?.location || window.ComCalSchedule.parseLocation(text),
+          description: meetings[0]?.activity || "",
+          professor: "",
+        });
+        break;
+      }
     }
 
-    const full = blocks.length
-      ? { text: headerText, words: headerWords }
-      : await worker.recognize(image).then((result) => result.data);
+    const pageTemplates = templatesFromPageWords(fullWords, dayHeaders);
+
     return {
-      text: `${headerText}\n${full.text || ""}\n${blockTemplates.map((item) => item.title).join("\n")}`,
-      words: full.words || headerWords,
+      text: `${headerText}\n${fullText}\n${blockTemplates.map((item) => item.title).join("\n")}`,
+      words: fullWords,
       blocks,
       blockTemplates,
+      pageTemplates,
       dayHeaders,
     };
   } finally {
     await worker.terminate();
   }
+}
+
+/**
+ * Build class templates from full-page OCR words by placing each COMM code
+ * into the Mon–Sun column under its x position.
+ */
+function templatesFromPageWords(words, dayHeaders) {
+  if (!words?.length || !dayHeaders?.length) return [];
+  const boxes = words
+    .map((word) => {
+      const bbox = word.bbox || {};
+      const raw = String(word.text || "").trim();
+      if (!raw) return null;
+      const x0 = bbox.x0 ?? 0;
+      const y0 = bbox.y0 ?? 0;
+      const x1 = bbox.x1 ?? x0 + 8;
+      const y1 = bbox.y1 ?? y0 + 8;
+      return {
+        raw,
+        x: (x0 + x1) / 2,
+        y: (y0 + y1) / 2,
+        x0,
+        y0,
+        x1,
+        y1,
+        confidence: word.confidence ?? 80,
+      };
+    })
+    .filter(Boolean)
+    .filter((word) => word.confidence >= 25);
+
+  const templates = [];
+  const seen = new Set();
+
+  for (let i = 0; i < boxes.length; i += 1) {
+    const a = boxes[i];
+    const b = boxes[i + 1];
+    const pair = `${a.raw} ${b?.raw || ""}`;
+    const codes = window.ComCalSchedule.extractCourseCodes(pair.toUpperCase());
+    if (!codes.length) continue;
+
+    // Gather nearby words in the same class tile (similar x column, below/near code)
+    const neighbors = boxes.filter(
+      (word) =>
+        Math.abs(word.x - a.x) < 90 &&
+        word.y >= a.y - 20 &&
+        word.y <= a.y + 140
+    );
+    const blob = neighbors
+      .sort((left, right) => left.y - right.y || left.x - right.x)
+      .map((word) => word.raw)
+      .join(" ");
+    const meetings = window.ComCalSchedule.extractSolusMeetings(blob);
+    const times = meetings[0]
+      ? { startMinutes: meetings[0].startMinutes, endMinutes: meetings[0].endMinutes }
+      : window.ComCalSchedule.parseTimeRange(blob);
+    const title = cleanImportedTitle(meetings[0]?.title || codes[0]);
+    if (!title || !times) continue;
+    const weekday = weekdayForSolusX(a.x, dayHeaders);
+    if (weekday == null) continue;
+    const key = `${weekday}|${times.startMinutes}|${times.endMinutes}|${title.toUpperCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    templates.push({
+      weekday,
+      startMinutes: times.startMinutes,
+      endMinutes: times.endMinutes,
+      title: meetings[0]?.activity ? `${title} ${meetings[0].activity}` : title,
+      location: meetings[0]?.location || window.ComCalSchedule.parseLocation(blob),
+      description: meetings[0]?.activity || "",
+    });
+  }
+
+  return templates;
 }
 
 async function readPdfText(file, onProgress) {
@@ -432,11 +520,14 @@ async function importScheduleFile(file, onProgress) {
     const data = await recognizeImage(file, onProgress);
     const fromText = window.ComCalSchedule.parseScheduleText(data.text || "");
     const fromGrid = window.ComCalSchedule.parseScheduleWords(data.words || [], data.blocks || []);
-    // Screenshot color-blocks already know the column/day. Do not merge OCR text
-    // templates — they often inherit a wrong weekday from the header row (e.g. Saturday).
-    const templates = (data.blockTemplates || []).length
-      ? window.ComCalSchedule.mergeTemplates(data.blockTemplates)
-      : window.ComCalSchedule.mergeTemplates(fromText.templates || [], fromGrid);
+    // Prefer color-block reads, then full-page word→column mapping, then text/grid fallbacks.
+    // Never let header-day OCR alone invent Saturday-only schedules.
+    const templates = window.ComCalSchedule.mergeTemplates(
+      data.blockTemplates || [],
+      data.pageTemplates || [],
+      fromGrid || [],
+      (fromText.templates || []).filter((row) => Number.isFinite(row.weekday))
+    );
     parsed = {
       templates,
       meetings: fromText.meetings || [],
