@@ -305,13 +305,21 @@ function removeCourseTopics() {
 
 function decorate(events) {
   const edits = loadEdits();
+  // Drop stale date overrides that kept the old multi-day deferral span.
+  const deferralEdit = edits["academic-summer-exam-deferral"];
+  if (deferralEdit && (deferralEdit.start || deferralEdit.end)) {
+    delete deferralEdit.start;
+    delete deferralEdit.end;
+    saveEdits(edits);
+  }
+
   const decorated = events
     .map((event) => {
       const patch = edits[event.id];
       if (patch?.deleted) return null;
       const merged = { ...event, professor: event.professor || "", ...(patch || {}) };
       merged.topicId = inferredTopicId(merged);
-      return merged;
+      return normalizeSummerDeferralEvent(merged);
     })
     .filter(Boolean)
     .sort((a, b) => new Date(a.start) - new Date(b.start));
@@ -324,6 +332,23 @@ function decorate(events) {
       color: topic?.color || SESSIONAL_COLOR,
     };
   });
+}
+
+function normalizeSummerDeferralEvent(event) {
+  if (!event) return event;
+  const match =
+    event.id === "academic-summer-exam-deferral" ||
+    /summer\s+term\s+final\s+exam\s+deferral/i.test(String(event.title || ""));
+  if (!match) return event;
+  const start = new Date(2026, 8, 2);
+  const end = new Date(2026, 8, 3);
+  return {
+    ...event,
+    id: event.id || "academic-summer-exam-deferral",
+    allDay: true,
+    start: start.toISOString(),
+    end: end.toISOString(),
+  };
 }
 
 function visibleEvents(events) {

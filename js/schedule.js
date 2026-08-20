@@ -936,8 +936,14 @@ function formatTemplateSummary(templates) {
 function allEvents() {
   const academic = window.ComCalAcademic?.events || [];
   const stored = loadScheduleEvents();
-  const schedule = coalesceClassLocationStubs(stored);
-  if (schedule !== stored) saveScheduleEvents(schedule);
+  // Remove imported copies of built-in sessional dates (they duplicate / keep old ranges).
+  const stripped = stored.filter(
+    (event) => !/summer\s+term\s+final\s+exam\s+deferral/i.test(String(event.title || ""))
+  );
+  const schedule = coalesceClassLocationStubs(stripped);
+  if (stripped.length !== stored.length || schedule !== stripped) {
+    saveScheduleEvents(schedule);
+  }
   const raw = [...academic, ...schedule].sort((a, b) => new Date(a.start) - new Date(b.start));
   return window.ComCalTopics ? window.ComCalTopics.decorate(raw) : raw;
 }

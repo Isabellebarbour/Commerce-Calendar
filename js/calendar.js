@@ -249,19 +249,32 @@ function allDaySpanForEvent(event, days) {
 
 function packAllDayLanes(days) {
   const segments = [];
+  const seenKeys = new Set();
 
   visibleCalendarEvents().forEach((event) => {
     if (!isAllDayCalendarEvent(event)) return;
-    const span = allDaySpanForEvent(event, days);
+    const normalized = normalizeAllDayEventDates(event);
+    const span = allDaySpanForEvent(normalized, days);
     if (!span) return;
-    // Keep each all-day chip inside a single day column (no multi-day bars).
-    for (let idx = span.startIdx; idx <= span.endIdx; idx += 1) {
-      segments.push({ event, startIdx: idx, endIdx: idx });
+
+    // Never draw a multi-day spanning bar — one chip in one column only.
+    // Deferral-style titles always use the first day of their range.
+    const singleOnly =
+      normalized.id === "academic-summer-exam-deferral" ||
+      /exam deferral/i.test(String(normalized.title || ""));
+    const startIdx = span.startIdx;
+    const endIdx = singleOnly ? span.startIdx : span.endIdx;
+
+    for (let idx = startIdx; idx <= endIdx; idx += 1) {
+      const key = `${normalized.id || normalized.title}|${idx}`;
+      if (seenKeys.has(key)) continue;
+      seenKeys.add(key);
+      segments.push({ event: normalized, startIdx: idx, endIdx: idx });
     }
   });
 
   segments.sort(
-    (a, b) => a.startIdx - b.startIdx || b.endIdx - a.endIdx || String(a.event.title).localeCompare(String(b.event.title))
+    (a, b) => a.startIdx - b.startIdx || String(a.event.title).localeCompare(String(b.event.title))
   );
 
   const lanes = [];
@@ -276,6 +289,20 @@ function packAllDayLanes(days) {
     lanes[laneIndex].push(segment);
   });
   return lanes;
+}
+
+/** Force known one-day sessional items to a single local day (fixes stale edits / old ranges). */
+function normalizeAllDayEventDates(event) {
+  if (!event) return event;
+  if (
+    event.id === "academic-summer-exam-deferral" ||
+    /summer\s+term\s+final\s+exam\s+deferral/i.test(String(event.title || ""))
+  ) {
+    const start = new Date(2026, 8, 2);
+    const end = new Date(2026, 8, 3);
+    return { ...event, allDay: true, start: start.toISOString(), end: end.toISOString() };
+  }
+  return event;
 }
 
 function allDayRow(days) {
