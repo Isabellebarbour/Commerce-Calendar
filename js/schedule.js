@@ -345,9 +345,14 @@ function extractSolusMeetings(raw) {
     if (FAKE_COURSE_SUBJECTS.has(match[1].toUpperCase())) continue;
     const times = parseTimeRange(match[5]);
     if (!times) continue;
-    const title = `${match[1].toUpperCase()} ${match[2].toUpperCase()}`;
+    const title = `${match[1].toUpperCase()} ${match[2].toUpperCase()}`.replace(/^\s*Waiting:\s*/i, "");
     const activity = match[4] || "";
     const before = text.slice(Math.max(0, match.index - 28), match.index);
+    // Don't inherit weekdays from SOLUS column headers sitting above the grid in OCR order
+    const beforeClean = before.replace(
+      /\b(sunday|monday|tuesday|wednesday|thursday|friday|saturday|sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat)\b/gi,
+      " "
+    );
     const after = text.slice(match.index, match.index + match[0].length + 28);
     meetings.push({
       title,
@@ -356,7 +361,7 @@ function extractSolusMeetings(raw) {
       startMinutes: times.startMinutes,
       endMinutes: times.endMinutes,
       location: match[6] ? match[6].replace(/\s+/g, " ") : parseLocation(after),
-      weekdays: parseWeekdays(before),
+      weekdays: parseWeekdays(beforeClean),
       index: match.index,
       raw: match[0],
     });
@@ -489,14 +494,29 @@ function parseScheduleWords(words = [], blocks = []) {
     .sort((a, b) => a.y - b.y || a.x - b.x);
 
   const headerY = dayHits[0]?.y ?? 0;
-  const dayHeaders = [];
+  const dayHeadersRaw = [];
   dayHits.forEach((hit) => {
     if (Math.abs(hit.y - headerY) > 36) return;
-    if (!dayHeaders.some((item) => item.day === hit.day)) dayHeaders.push(hit);
+    if (!dayHeadersRaw.some((item) => item.day === hit.day)) dayHeadersRaw.push(hit);
   });
-  dayHeaders.sort((a, b) => a.x - b.x);
+  dayHeadersRaw.sort((a, b) => a.x - b.x);
 
-  const gutterX = dayHeaders.length ? Math.min(...dayHeaders.map((item) => item.x0)) - 12 : 80;
+  const maxX = Math.max(...usable.map((word) => word.x1), 100);
+  let dayHeaders = dayHeadersRaw;
+  if (dayHeaders.length < 5) {
+    const gutter = dayHeaders.length
+      ? Math.max(40, Math.min(...dayHeaders.map((item) => item.x0 ?? item.x)) - 24)
+      : Math.max(60, Math.round(maxX * 0.11));
+    const width = Math.max(100, maxX - gutter);
+    const col = width / 7;
+    dayHeaders = Array.from({ length: 7 }, (_, index) => ({
+      day: (index + 1) % 7,
+      x: gutter + col * (index + 0.5),
+      x0: gutter + col * index,
+    }));
+  }
+
+  const gutterX = dayHeaders.length ? Math.min(...dayHeaders.map((item) => item.x0 ?? item.x)) - 12 : 80;
   const colWidth =
     dayHeaders.length >= 2
       ? Math.abs(dayHeaders[1].x - dayHeaders[0].x)

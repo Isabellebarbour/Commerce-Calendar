@@ -77,8 +77,9 @@ function upscaleImage(image) {
 function isClassFill(r, g, b) {
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
-  if (max < 140 || min > 246 || max - min < 16) return false;
-  if (g > r + 8 && g > b + 6 && g > 155) return true;
+  if (max < 130 || min > 250 || max - min < 12) return false;
+  // SOLUS week view uses mint/green class tiles
+  if (g > r + 6 && g > b + 4 && g > 145) return true;
   if (b > r + 8 && b >= g - 12 && b > 160 && r > 120) return true;
   return false;
 }
@@ -131,7 +132,7 @@ function findClassBlocks(canvas) {
       }
       const bw = maxX - minX + 1;
       const bh = maxY - minY + 1;
-      if (count > 350 && bw > 36 && bh > 24 && bw < width * 0.45 && bh < height * 0.55) {
+      if (count > 220 && bw > 28 && bh > 18 && bw < width * 0.5 && bh < height * 0.6) {
         boxes.push({
           x0: minX,
           y0: minY,
@@ -169,25 +170,106 @@ function cropCanvas(source, box, pad = 6) {
   return canvas;
 }
 
-function templatesFromSolusBlocks(blocks, headerWords) {
+function dayNameLookup(raw) {
+  const key = String(raw || "")
+    .toLowerCase()
+    .replace(/[^a-z]/g, "");
+  const lookup = {
+    sunday: 0,
+    sun: 0,
+    monday: 1,
+    mon: 1,
+    tuesday: 2,
+    tue: 2,
+    tues: 2,
+    wednesday: 3,
+    wed: 3,
+    thursday: 4,
+    thu: 4,
+    thur: 4,
+    thurs: 4,
+    friday: 5,
+    fri: 5,
+    saturday: 6,
+    sat: 6,
+  };
+  return lookup[key] ?? lookup[key.slice(0, 3)] ?? null;
+}
+
+/** SOLUS week grid is always Mon → Sun left-to-right. */
+function solusColumnWeekday(columnIndex) {
+  return (Number(columnIndex) + 1) % 7;
+}
+
+function estimateSolusGutter(imageWidth, dayHeaders) {
+  if (dayHeaders.length >= 2) {
+    const leftmost = Math.min(...dayHeaders.map((item) => item.x));
+    return Math.max(40, Math.min(imageWidth * 0.22, leftmost - 24));
+  }
+  return Math.max(60, Math.round(imageWidth * 0.11));
+}
+
+function synthesizeSolusDayHeaders(imageWidth, gutter) {
+  const left = Math.max(0, gutter);
+  const width = Math.max(100, imageWidth - left);
+  const col = width / 7;
+  return Array.from({ length: 7 }, (_, index) => ({
+    day: solusColumnWeekday(index),
+    x: left + col * (index + 0.5),
+  }));
+}
+
+function dayHeadersFromWords(headerWords) {
   const dayHits = (headerWords || [])
     .map((word) => {
       const bbox = word.bbox || {};
-      const raw = String(word.text || "");
-      const key = raw.toLowerCase().replace(/[^a-z]/g, "");
-      const lookup = { sunday: 0, sun: 0, monday: 1, mon: 1, tuesday: 2, tue: 2, tues: 2, wednesday: 3, wed: 3, thursday: 4, thu: 4, friday: 5, fri: 5, saturday: 6, sat: 6 };
-      const day = lookup[key] ?? lookup[key.slice(0, 3)];
+      const day = dayNameLookup(word.text || word.raw || "");
       if (day == null) return null;
-      const x = ((bbox.x0 ?? 0) + (bbox.x1 ?? 0)) / 2;
+      const x = ((bbox.x0 ?? word.x0 ?? 0) + (bbox.x1 ?? word.x1 ?? 0)) / 2;
       return { day, x };
     })
     .filter(Boolean)
     .sort((a, b) => a.x - b.x);
+
   const unique = [];
   dayHits.forEach((hit) => {
     if (!unique.some((item) => item.day === hit.day)) unique.push(hit);
   });
-  return { dayHeaders: unique };
+  return unique;
+}
+
+/**
+ * Prefer OCR day labels when they look like a full week row; otherwise fall back to
+ * fixed Mon–Sun columns (SOLUS layout). Partial OCR (e.g. only Saturday) was snapping
+ * every class onto Saturday.
+ */
+function resolveSolusDayHeaders(imageWidth, headerWords) {
+  const fromOcr = dayHeadersFromWords(headerWords);
+  const gutter = estimateSolusGutter(imageWidth, fromOcr);
+  const synthesized = synthesizeSolusDayHeaders(imageWidth, gutter);
+
+  if (fromOcr.length >= 5) {
+    const xs = fromOcr.map((item) => item.x);
+    const span = Math.max(...xs) - Math.min(...xs);
+    if (span > imageWidth * 0.45) return fromOcr;
+  }
+
+  // If OCR found Mon near the left, keep synthesized Mon–Sun (more reliable than sparse OCR).
+  return synthesized;
+}
+
+function weekdayForSolusX(x, dayHeaders) {
+  if (!dayHeaders?.length) return null;
+  return dayHeaders.reduce((best, header) =>
+    Math.abs(header.x - x) < Math.abs(best.x - x) ? header : best
+  ).day;
+}
+
+function cleanImportedTitle(title) {
+  return String(title || "")
+    .replace(/^\s*Waiting:\s*/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function imageToCanvas(image, scale = 1) {
@@ -230,7 +312,7 @@ async function recognizeImage(file, onProgress) {
       headerWords = headerResult.data.words || [];
     }
 
-    const { dayHeaders } = templatesFromSolusBlocks(blocks, headerWords);
+    const dayHeaders = resolveSolusDayHeaders(image.width, headerWords);
     const blockTemplates = [];
 
     for (let index = 0; index < blocks.length; index += 1) {
@@ -243,13 +325,9 @@ async function recognizeImage(file, onProgress) {
       const times = meetings[0]
         ? { startMinutes: meetings[0].startMinutes, endMinutes: meetings[0].endMinutes }
         : window.ComCalSchedule.parseTimeRange(text);
-      const title = meetings[0]?.title || codes[0];
+      const title = cleanImportedTitle(meetings[0]?.title || codes[0] || "");
       if (!title || !times) continue;
-      const weekday = dayHeaders.length
-        ? dayHeaders.reduce((best, header) =>
-            Math.abs(header.x - blocks[index].cx) < Math.abs(best.x - blocks[index].cx) ? header : best
-          ).day
-        : null;
+      const weekday = weekdayForSolusX(blocks[index].cx, dayHeaders);
       if (weekday == null) continue;
       blockTemplates.push({
         weekday,
@@ -258,15 +336,19 @@ async function recognizeImage(file, onProgress) {
         title: meetings[0]?.activity ? `${title} ${meetings[0].activity}` : title,
         location: meetings[0]?.location || window.ComCalSchedule.parseLocation(text),
         description: meetings[0]?.activity || "",
+        professor: "",
       });
     }
 
-    const full = blocks.length ? { text: headerText, words: headerWords } : await worker.recognize(image).then((result) => result.data);
+    const full = blocks.length
+      ? { text: headerText, words: headerWords }
+      : await worker.recognize(image).then((result) => result.data);
     return {
       text: `${headerText}\n${full.text || ""}\n${blockTemplates.map((item) => item.title).join("\n")}`,
       words: full.words || headerWords,
       blocks,
       blockTemplates,
+      dayHeaders,
     };
   } finally {
     await worker.terminate();
@@ -350,12 +432,13 @@ async function importScheduleFile(file, onProgress) {
     const data = await recognizeImage(file, onProgress);
     const fromText = window.ComCalSchedule.parseScheduleText(data.text || "");
     const fromGrid = window.ComCalSchedule.parseScheduleWords(data.words || [], data.blocks || []);
+    // Screenshot color-blocks already know the column/day. Do not merge OCR text
+    // templates — they often inherit a wrong weekday from the header row (e.g. Saturday).
+    const templates = (data.blockTemplates || []).length
+      ? window.ComCalSchedule.mergeTemplates(data.blockTemplates)
+      : window.ComCalSchedule.mergeTemplates(fromText.templates || [], fromGrid);
     parsed = {
-      templates: window.ComCalSchedule.mergeTemplates(
-        data.blockTemplates || [],
-        fromText.templates,
-        fromGrid
-      ),
+      templates,
       meetings: fromText.meetings || [],
       oneOffs: fromText.oneOffs,
       text: data.text || "",
