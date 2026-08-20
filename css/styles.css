@@ -646,6 +646,10 @@ body.is-app #landing {
   overflow: auto;
 }
 
+.main:has(#page-calendar.is-active) {
+  overflow: hidden;
+}
+
 .page {
   display: none;
   min-height: 100%;
@@ -915,7 +919,67 @@ body.is-app #landing {
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
   background: #fff;
+}
+
+#page-calendar.is-active {
+  overflow: hidden;
+}
+
+.cal-week,
+.cal-day {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.cal-scroll {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.cal-sticky-chrome {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  background: #fff;
+  box-shadow: 0 1px 0 #ebebeb;
+}
+
+.cal-week-head,
+.cal-day-head {
+  display: grid;
+  flex-shrink: 0;
+  border-top: 1px solid #ebebeb;
+  border-bottom: 0;
+  background: #fff;
+}
+
+.cal-week-head {
+  grid-template-columns: 72px repeat(7, 1fr);
+}
+
+.cal-day-head {
+  grid-template-columns: 72px 1fr;
+}
+
+.cal-allday-row {
+  display: grid;
+  flex-shrink: 0;
+  grid-template-columns: 72px repeat(7, 1fr);
+  border-bottom: 1px solid #ebebeb;
+  background: #fff;
+  max-height: 132px;
+  overflow: auto;
+}
+
+.cal-day .cal-allday-row {
+  grid-template-columns: 72px 1fr;
 }
 
 .cal-main {
@@ -1446,44 +1510,6 @@ body.is-app #landing {
   color: #555;
 }
 
-.cal-week,
-.cal-day {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-}
-
-.cal-week-head,
-.cal-day-head {
-  display: grid;
-  flex-shrink: 0;
-  border-top: 1px solid #ebebeb;
-  border-bottom: 1px solid #ebebeb;
-}
-
-.cal-week-head {
-  grid-template-columns: 72px repeat(7, 1fr);
-}
-
-.cal-day-head {
-  grid-template-columns: 72px 1fr;
-}
-
-.cal-allday-row {
-  display: grid;
-  flex-shrink: 0;
-  grid-template-columns: 72px repeat(7, 1fr);
-  border-bottom: 1px solid #ebebeb;
-  background: #fafafa;
-  max-height: 120px;
-  overflow: auto;
-}
-
-.cal-day .cal-allday-row {
-  grid-template-columns: 72px 1fr;
-}
-
 .cal-allday-gutter {
   display: flex;
   align-items: flex-start;
@@ -1603,13 +1629,6 @@ body.is-app #landing {
   background: #ef5343;
   color: #fff;
   font-weight: 700;
-}
-
-.cal-scroll {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
 }
 
 .cal-time-grid {

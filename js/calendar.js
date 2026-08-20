@@ -201,6 +201,13 @@ function isAllDayCalendarEvent(event) {
   if (event.allDay) return true;
   if (event.source === "academic") return true;
   if (event.source === "assignment") return true;
+  if (event.topicId === "sessional" || event.topicId === "assignments") return true;
+  // Multi-hour / midnight-spanning blocks without a real clock time
+  const start = new Date(event.start);
+  const end = new Date(event.end);
+  if (Number.isFinite(start) && Number.isFinite(end) && end - start >= 20 * 60 * 60 * 1000) {
+    return true;
+  }
   return false;
 }
 
@@ -310,8 +317,7 @@ function allDayColumn(day) {
 }
 
 function allDayRow(days) {
-  const hasAny = days.some((day) => eventsForDay(day).some(isAllDayCalendarEvent));
-  if (!hasAny) return "";
+  // Always reserve the row in week/day view so sticky chrome height stays stable.
   return `<div class="cal-allday-row" aria-label="All-day events">
     <div class="cal-allday-gutter"><span>All day</span></div>
     ${days.map(allDayColumn).join("")}
@@ -339,12 +345,14 @@ function renderWeek() {
 
   calBody.innerHTML = `
     <div class="cal-week">
-      <div class="cal-week-head">
-        <div class="cal-head-gutter"></div>
-        ${days.map((day) => headDay(day, today)).join("")}
-      </div>
-      ${allDayRow(days)}
       <div class="cal-scroll">
+        <div class="cal-sticky-chrome">
+          <div class="cal-week-head">
+            <div class="cal-head-gutter"></div>
+            ${days.map((day) => headDay(day, today)).join("")}
+          </div>
+          ${allDayRow(days)}
+        </div>
         <div class="cal-time-grid">
           <div class="cal-hours">${hourLabels()}</div>
           <div class="cal-cols">
@@ -365,12 +373,14 @@ function renderDay() {
 
   calBody.innerHTML = `
     <div class="cal-day">
-      <div class="cal-day-head">
-        <div class="cal-head-gutter"></div>
-        ${headDay(day, today)}
-      </div>
-      ${allDayRow(days)}
       <div class="cal-scroll">
+        <div class="cal-sticky-chrome">
+          <div class="cal-day-head">
+            <div class="cal-head-gutter"></div>
+            ${headDay(day, today)}
+          </div>
+          ${allDayRow(days)}
+        </div>
         <div class="cal-time-grid">
           <div class="cal-hours">${hourLabels()}</div>
           <div class="cal-cols">
