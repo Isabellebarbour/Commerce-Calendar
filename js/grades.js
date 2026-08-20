@@ -197,12 +197,55 @@ function curriculumYearForCode(code) {
       }
     }
   }
-  const match = normalized.match(/\b[A-Z]{2,5}\s+(\d)/);
-  if (match) {
-    const hundreds = Number(match[1]);
-    if (hundreds >= 1 && hundreds <= 4) return hundreds;
-  }
   return null;
+}
+
+/** e.g. "Spring 2028" → 2028 */
+function graduationCalendarYear() {
+  const raw = window.ComCalAuth?.getSession?.()?.graduationDate || "";
+  const match = String(raw).match(/(20\d{2})/);
+  return match ? Number(match[1]) : null;
+}
+
+/**
+ * Commerce program year runs Summer → Spring.
+ * Summer/Fall 2026 and Winter/Spring 2027 share the same program year.
+ */
+function academicStartYearFromTerm(term) {
+  const match = String(term || "").match(/\b(Fall|Winter|Summer|Spring)\s+(20\d{2})\b/i);
+  if (!match) return null;
+  const season = match[1].toLowerCase();
+  const calendarYear = Number(match[2]);
+  if (season === "winter" || season === "spring") return calendarYear - 1;
+  return calendarYear;
+}
+
+/**
+ * Grad Spring 2028 → Year 1 is Summer 2024–Spring 2025, so Summer 2026 is Year 3.
+ * Grad Spring 2030 → Year 1 is Summer 2026–Spring 2027.
+ */
+function programYearForTerm(term) {
+  const gradYear = graduationCalendarYear();
+  const startYear = academicStartYearFromTerm(term);
+  if (!gradYear || !startYear) return null;
+  const year = startYear - gradYear + 5;
+  if (year < 1 || year > 4) return null;
+  return year;
+}
+
+function yearForCourse(code, term) {
+  return programYearForTerm(term) || curriculumYearForCode(code) || null;
+}
+
+function refreshCourseYears() {
+  let changed = false;
+  gradesState.courses = gradesState.courses.map((course) => {
+    const year = yearForCourse(course.code, course.term);
+    if (year === course.year) return course;
+    changed = true;
+    return { ...course, year };
+  });
+  if (changed) saveGrades();
 }
 
 function gpaSummary(courses) {
@@ -556,7 +599,7 @@ function parseCourseChunk(chunk, currentTerm) {
   // Term comes only from transcript section headers — never from scrambled
   // leftover text inside the course row (that caused Fall 2026 on Winter courses).
   const term = currentTerm || "";
-  const year = curriculumYearForCode(code) || null;
+  const year = yearForCourse(code, term);
 
   return {
     id: crypto.randomUUID(),
@@ -855,6 +898,7 @@ function render() {
   const subtitle = document.getElementById("grades-subtitle");
   if (!body) return;
 
+  refreshCourseYears();
   renderYearTabs();
   const courses = visibleCourses();
 
@@ -1131,7 +1175,7 @@ function confirmTranscriptImport() {
     const letter = normalizeLetter(letterSelect?.value || course.letter) || course.letter;
     const termRaw = String(termInput?.value || course.term || "").trim();
     const term = findTermInText(termRaw) || termRaw;
-    return { ...course, letter, term };
+    return { ...course, letter, term, year: yearForCourse(course.code, term) };
   });
 
   mergeImportedCourses(pendingImportCourses, pendingImportCareer);
@@ -1160,6 +1204,7 @@ function updateCourseTerm(courseId, termValue) {
   if (!course) return;
   const raw = String(termValue || "").trim();
   course.term = findTermInText(raw) || raw;
+  course.year = yearForCourse(course.code, course.term);
   saveGrades();
   render();
 }
@@ -1296,7 +1341,7 @@ function saveEditGrades() {
       units: row.units,
       letter,
       term,
-      year: curriculumYearForCode(code),
+      year: yearForCourse(code, term),
     });
   });
 
