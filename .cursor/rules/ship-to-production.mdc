@@ -1,0 +1,23 @@
+---
+description: Auto-commit and push site changes to GitHub Pages production
+alwaysApply: true
+---
+
+# Ship to production automatically
+
+This project is a static site hosted on GitHub Pages (`Isabellebarbour/Commerce-Calendar` → smithcommercecalendar.com).
+
+After finishing user-requested code/content changes that should appear on the live site:
+
+1. Commit the relevant files with a concise message (HEREDOC).
+2. Push to `origin main` immediately (`git push origin main`).
+3. Bump `?v=` cache-bust query params on changed JS/CSS in `index.html` when those assets change.
+4. Tell the user briefly that it’s live and to hard-refresh (Cmd+Shift+R) if needed.
+
+Do **not** wait for the user to ask to commit or push for normal feature/bugfix work.
+
+Exceptions — ask first before committing/pushing:
+
+- Secrets or private credentials the user may not want public
+- Destructive git operations (force push, reset, etc.)
+- Changes the user explicitly said are local-only or WIP
