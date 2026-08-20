@@ -971,7 +971,11 @@ body.is-app #landing {
 .cal-allday-row {
   display: grid;
   flex-shrink: 0;
-  grid-template-columns: 72px repeat(7, 1fr);
+  grid-template-columns: 72px repeat(var(--allday-days, 7), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--allday-lanes, 1), auto);
+  gap: 3px 4px;
+  align-items: stretch;
+  padding: 4px 4px 6px 0;
   border-bottom: 1px solid #ebebeb;
   background: #fff;
   max-height: 132px;
@@ -979,7 +983,7 @@ body.is-app #landing {
 }
 
 .cal-day .cal-allday-row {
-  grid-template-columns: 72px 1fr;
+  grid-template-columns: 72px minmax(0, 1fr);
 }
 
 .cal-main {
@@ -1514,7 +1518,7 @@ body.is-app #landing {
   display: flex;
   align-items: flex-start;
   justify-content: flex-end;
-  padding: 8px 8px 6px 0;
+  padding: 6px 8px 4px 0;
   border-right: 1px solid #ebebeb;
 }
 
@@ -1526,22 +1530,9 @@ body.is-app #landing {
   text-align: right;
 }
 
-.cal-allday-col {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-height: 28px;
-  padding: 4px;
-  border-right: 1px solid #ebebeb;
-}
-
-.cal-allday-col:last-child {
-  border-right: 0;
-}
-
 .cal-allday-event {
   display: block;
-  width: 100%;
+  min-width: 0;
   overflow: hidden;
   padding: 4px 7px 4px 8px;
   border: 0;

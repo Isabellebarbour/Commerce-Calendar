@@ -202,22 +202,16 @@ function isAllDayCalendarEvent(event) {
   if (event.source === "academic") return true;
   if (event.source === "assignment") return true;
   if (event.topicId === "sessional" || event.topicId === "assignments") return true;
-  // Multi-hour / midnight-spanning blocks without a real clock time
-  const start = new Date(event.start);
-  const end = new Date(event.end);
-  if (Number.isFinite(start) && Number.isFinite(end) && end - start >= 20 * 60 * 60 * 1000) {
-    return true;
-  }
   return false;
 }
 
-function allDayEventHtml(event) {
+function allDayEventHtml(event, extraStyle = "") {
   const title = event.source === "assignment" ? event.title : eventChipLabel(event);
   const subtitle =
     event.source === "assignment"
       ? event.location || event.courseCode || "All day"
       : event.location || "All day";
-  return `<button type="button" class="cal-allday-event${eventStripeClass(event)}" data-event-id="${escapeCal(event.id)}" style="${eventStyleVars(event)}" title="${escapeCal(event.description || event.title)}">
+  return `<button type="button" class="cal-allday-event${eventStripeClass(event)}" data-event-id="${escapeCal(event.id)}" style="${eventStyleVars(event)};${extraStyle}" title="${escapeCal(event.description || event.title)}">
     <strong>${escapeCal(title)}</strong>
     ${subtitle ? `<span>${escapeCal(subtitle)}</span>` : ""}
   </button>`;
@@ -225,6 +219,82 @@ function allDayEventHtml(event) {
 
 function eventsForDay(day) {
   return window.ComCalSchedule.eventsOnDay(visibleCalendarEvents(), day);
+}
+
+/** Inclusive day indexes [startIdx, endIdx] within the visible days row. */
+function allDaySpanForEvent(event, days) {
+  if (!days.length) return null;
+  const eventStart = new Date(event.start);
+  const eventEnd = new Date(event.end);
+  let startIdx = -1;
+  let endIdx = -1;
+
+  days.forEach((day, index) => {
+    const dayStart = startOfDay(day);
+    const dayEnd = addDays(dayStart, 1);
+    // Same coverage rule as ComCalSchedule.eventsOnDay.
+    if (eventStart < dayEnd && eventEnd > dayStart) {
+      if (startIdx === -1) startIdx = index;
+      endIdx = index;
+    }
+  });
+
+  if (startIdx === -1) return null;
+  return { startIdx, endIdx };
+}
+
+function packAllDayLanes(days) {
+  const seen = new Set();
+  const segments = [];
+
+  visibleCalendarEvents().forEach((event) => {
+    if (!isAllDayCalendarEvent(event) || seen.has(event.id)) return;
+    const span = allDaySpanForEvent(event, days);
+    if (!span) return;
+    seen.add(event.id);
+    segments.push({ event, ...span });
+  });
+
+  segments.sort(
+    (a, b) => a.startIdx - b.startIdx || b.endIdx - a.endIdx || String(a.event.title).localeCompare(String(b.event.title))
+  );
+
+  const lanes = [];
+  segments.forEach((segment) => {
+    let laneIndex = lanes.findIndex((lane) =>
+      lane.every((other) => other.endIdx < segment.startIdx || other.startIdx > segment.endIdx)
+    );
+    if (laneIndex === -1) {
+      laneIndex = lanes.length;
+      lanes.push([]);
+    }
+    lanes[laneIndex].push(segment);
+  });
+  return lanes;
+}
+
+function allDayRow(days) {
+  const lanes = packAllDayLanes(days);
+  const laneCount = Math.max(lanes.length, 1);
+  const dayCols = days.length;
+  const chips = lanes
+    .flatMap((lane, laneIndex) =>
+      lane.map((segment) => {
+        // grid-column: gutter is 1, days start at 2
+        const colStart = segment.startIdx + 2;
+        const colEnd = segment.endIdx + 3;
+        return allDayEventHtml(
+          segment.event,
+          `grid-column:${colStart}/${colEnd};grid-row:${laneIndex + 1}`
+        );
+      })
+    )
+    .join("");
+
+  return `<div class="cal-allday-row" style="--allday-days:${dayCols};--allday-lanes:${laneCount}" aria-label="All-day events">
+    <div class="cal-allday-gutter" style="grid-row:1 / span ${laneCount}"><span>All day</span></div>
+    ${chips}
+  </div>`;
 }
 
 function renderTitle() {
@@ -306,22 +376,6 @@ function dayColumn(day, today) {
     .join("");
 
   return `<div class="cal-col">${slots}${events}${nowLine}</div>`;
-}
-
-function allDayColumn(day) {
-  const items = eventsForDay(day).filter(isAllDayCalendarEvent);
-  if (!items.length) {
-    return `<div class="cal-allday-col" aria-hidden="true"></div>`;
-  }
-  return `<div class="cal-allday-col">${items.map(allDayEventHtml).join("")}</div>`;
-}
-
-function allDayRow(days) {
-  // Always reserve the row in week/day view so sticky chrome height stays stable.
-  return `<div class="cal-allday-row" aria-label="All-day events">
-    <div class="cal-allday-gutter"><span>All day</span></div>
-    ${days.map(allDayColumn).join("")}
-  </div>`;
 }
 
 function headDay(day, today) {
