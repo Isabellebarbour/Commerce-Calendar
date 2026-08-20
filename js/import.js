@@ -74,12 +74,16 @@ function upscaleImage(image) {
   return canvas;
 }
 
-function isClassFill(r, g, b) {
+function isClassFill(r, g, b, loose = false) {
   // Prefer SOLUS sage tiles (~187,208,153). Loose greens merge adjacent columns.
   if (r >= 150 && r <= 220 && g >= 175 && g <= 240 && b >= 110 && b <= 195 && g >= r + 6 && g >= b + 10) {
     return true;
   }
   if (g > r + 8 && g > b + 6 && g > 140 && g < 235 && r > 120 && b > 100) return true;
+  if (loose) {
+    if (g >= r && g >= b - 8 && g > 130 && g - Math.min(r, b) >= 8) return true;
+    if (g > r + 4 && g > b + 2 && g > 125) return true;
+  }
   return false;
 }
 
@@ -106,13 +110,13 @@ function erodeMask(mask, width, height, rounds = 2) {
   return current;
 }
 
-function findClassBlocks(canvas) {
+function findClassBlocks(canvas, { loose = false } = {}) {
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   const { width, height } = canvas;
   const { data } = ctx.getImageData(0, 0, width, height);
   const raw = new Uint8Array(width * height);
   for (let i = 0, p = 0; i < data.length; i += 4, p += 1) {
-    raw[p] = isClassFill(data[i], data[i + 1], data[i + 2]) ? 1 : 0;
+    raw[p] = isClassFill(data[i], data[i + 1], data[i + 2], loose) ? 1 : 0;
   }
   // Erode so touching day-column tiles don't flood into one blob.
   const mask = erodeMask(raw, width, height, 3);
@@ -260,6 +264,99 @@ function minutesFromSolusY(y, gridTop, gridBottom, startMinutes = 8 * 60, endMin
   const minutes = startMinutes + t * (endMinutes - startMinutes);
   return Math.round(minutes / 5) * 5;
 }
+
+/**
+ * Build a Y→minutes scale from the left-hand time labels (8:00AM, 9:00AM, …).
+ * This is more reliable than reading times inside green tiles.
+ */
+function buildGutterTimeScale(words, imageWidth, fallbackTop, fallbackBottom) {
+  const leftMax = Math.max(70, imageWidth * 0.2);
+  const marks = [];
+  (words || []).forEach((word) => {
+    const bbox = word.bbox || {};
+    const x0 = bbox.x0 ?? word.x0 ?? 0;
+    const x1 = bbox.x1 ?? word.x1 ?? x0;
+    const y0 = bbox.y0 ?? word.y0 ?? 0;
+    const y1 = bbox.y1 ?? word.y1 ?? y0;
+    const x = (x0 + x1) / 2;
+    if (x > leftMax) return;
+    const raw = String(word.text || word.raw || "").replace(/\s+/g, "");
+    let hour;
+    let minute = 0;
+    let meridiem = "";
+    let match = raw.match(/^(\d{1,2})[:.](\d{2})([AaPp])[Mm]?$/i);
+    if (match) {
+      hour = Number(match[1]);
+      minute = Number(match[2]);
+      meridiem = match[3];
+    } else {
+      match = raw.match(/^(\d{1,2})([AaPp])[Mm]?$/i);
+      if (!match) return;
+      hour = Number(match[1]);
+      meridiem = match[2];
+    }
+    if (meridiem.toLowerCase().startsWith("p") && hour < 12) hour += 12;
+    if (meridiem.toLowerCase().startsWith("a") && hour === 12) hour = 0;
+    if (hour > 23 || minute > 59) return;
+    marks.push({ y: (y0 + y1) / 2, minutes: hour * 60 + minute });
+  });
+  marks.sort((a, b) => a.y - b.y);
+  // Deduplicate similar Y marks
+  const unique = [];
+  marks.forEach((mark) => {
+    const last = unique[unique.length - 1];
+    if (last && Math.abs(last.y - mark.y) < 8) {
+      last.minutes = mark.minutes;
+      last.y = (last.y + mark.y) / 2;
+    } else {
+      unique.push({ ...mark });
+    }
+  });
+
+  if (unique.length >= 2) {
+    return {
+      source: "gutter",
+      marks: unique,
+      minutesAt(y) {
+        if (y <= unique[0].y) return unique[0].minutes;
+        if (y >= unique[unique.length - 1].y) return unique[unique.length - 1].minutes;
+        for (let i = 1; i < unique.length; i += 1) {
+          if (y <= unique[i].y) {
+            const span = unique[i].y - unique[i - 1].y || 1;
+            const t = (y - unique[i - 1].y) / span;
+            const minutes =
+              unique[i - 1].minutes + t * (unique[i].minutes - unique[i - 1].minutes);
+            return Math.round(minutes / 5) * 5;
+          }
+        }
+        return unique[unique.length - 1].minutes;
+      },
+    };
+  }
+
+  return {
+    source: "fallback",
+    marks: [],
+    minutesAt(y) {
+      return minutesFromSolusY(y, fallbackTop, fallbackBottom);
+    },
+  };
+}
+
+function pickCourseTitle(text, codes, meetings) {
+  if (meetings?.[0]?.title && PREFERRED_SUBJECT_RE.test(meetings[0].title)) {
+    return cleanImportedTitle(meetings[0].title);
+  }
+  const list = codes || [];
+  const preferred = list.find((code) => PREFERRED_SUBJECT_RE.test(code));
+  if (preferred) return preferred;
+  if (meetings?.[0]?.title) return cleanImportedTitle(meetings[0].title);
+  if (list[0]) return list[0];
+  return "";
+}
+
+const PREFERRED_SUBJECT_RE =
+  /^(COMM|CISC|MATH|ECON|EMPR|HIST|PHIL|PSYC|BIOL|CHEM|PHYS|DEVS|FILM|MUSC|RELS|POLS|SOCY|GNDS|INTS|ENGL|FREN|SPAN|LLCU|ANAT|PHGY|KNPE|HLTH|NURS|LAW|MBA)\b/i;
 
 function dayNameLookup(raw) {
   const key = String(raw || "")
@@ -445,7 +542,10 @@ async function recognizeImage(file, onProgress) {
   const Tesseract = await loadTesseract();
   const source = await fileToImage(file);
   const preview = imageToCanvas(source, 1);
-  const rawBlocks = findClassBlocks(preview);
+  let rawBlocks = findClassBlocks(preview);
+  if (rawBlocks.length < 2) {
+    rawBlocks = findClassBlocks(preview, { loose: true });
+  }
   const image = upscaleImage(source);
   const scale = image.width / preview.width;
   const blocks = rawBlocks.map((block) => ({
@@ -460,10 +560,34 @@ async function recognizeImage(file, onProgress) {
 
   const worker = await Tesseract.createWorker("eng");
   try {
-    // Full-page OCR: raw + high-contrast binarized grid (green-on-green needs the latter).
+    // Always OCR the full week grid so we can recover if color-block crops fail.
     const fullResult = await worker.recognize(image);
     let fullText = fullResult.data.text || "";
     let fullWords = fullResult.data.words || [];
+
+    // Dedicated pass on the left time column — these labels are the source of truth for times.
+    const gutterBox = {
+      x0: 0,
+      y0: Math.round(image.height * 0.08),
+      x1: Math.round(image.width * 0.16),
+      y1: Math.round(image.height * 0.88),
+    };
+    const gutterCrop = cropCanvas(image, gutterBox, 0, { contrast: true });
+    const gutterResult = await worker.recognize(gutterCrop);
+    const gutterWords = (gutterResult.data.words || []).map((word) => {
+      const bbox = word.bbox || {};
+      return {
+        ...word,
+        bbox: {
+          x0: (bbox.x0 || 0) + gutterBox.x0,
+          y0: (bbox.y0 || 0) + gutterBox.y0,
+          x1: (bbox.x1 || 0) + gutterBox.x0,
+          y1: (bbox.y1 || 0) + gutterBox.y0,
+        },
+      };
+    });
+    fullWords = [...gutterWords, ...fullWords];
+    fullText = `${gutterResult.data.text || ""}\n${fullText}`;
 
     const gridTopGuess = blocks.length ? Math.min(...blocks.map((b) => b.y0)) - 30 : Math.round(image.height * 0.08);
     const gridBottomGuess = blocks.length
@@ -512,42 +636,63 @@ async function recognizeImage(file, onProgress) {
     // Prefer a stable 8am–10pm span when the screenshot includes Display Options below.
     const solusTop = Math.min(gridTop, Math.round(image.height * 0.12));
     const solusBottom = Math.max(gridBottom, Math.min(image.height * 0.85, gridBottom + 40));
+    const timeScale = buildGutterTimeScale(
+      [...headerWords, ...fullWords],
+      image.width,
+      solusTop,
+      solusBottom
+    );
+    onProgress?.(
+      timeScale.source === "gutter"
+        ? `Using ${timeScale.marks.length} time labels from the left column…`
+        : "Reading class blocks…"
+    );
+
+    // Keep real tiles only (drop green noise / chrome).
+    const minBlockHeight = Math.max(18, Math.round(image.height * 0.025));
+    const classBlocks = blocks.filter(
+      (block) =>
+        block.y1 - block.y0 >= minBlockHeight &&
+        block.x1 - block.x0 >= 18 &&
+        block.cy > solusTop - 10
+    );
+
     const blockTemplates = [];
 
-    for (let index = 0; index < blocks.length; index += 1) {
-      onProgress?.(`Reading class ${index + 1} of ${blocks.length}…`);
-      const soft = cropCanvas(image, blocks[index], 10, { contrast: true });
-      const hard = cropCanvas(image, blocks[index], 10, { binarize: true });
+    for (let index = 0; index < classBlocks.length; index += 1) {
+      onProgress?.(`Reading class ${index + 1} of ${classBlocks.length}…`);
+      const block = classBlocks[index];
+      const hard = cropCanvas(image, block, 10, { binarize: true });
+      const soft = cropCanvas(image, block, 10, { contrast: true });
       let text = "";
       let bestScore = -1;
       for (const crop of [hard, soft]) {
         const result = await worker.recognize(crop);
         const candidate = `${result.data.text || ""}`;
         const score =
-          (candidate.match(/COMM|CISC|MATH|ECON|Lecture|Goodes|\d{1,2}:\d{2}/gi) || []).length;
+          (candidate.match(/COMM|CISC|MATH|ECON|EMPR|Lecture|Goodes|\d{1,2}:\d{2}/gi) || []).length;
         if (score > bestScore) {
           bestScore = score;
           text = candidate;
         }
         if (score >= 2) break;
       }
+
       const meetings = window.ComCalSchedule.extractSolusMeetings(text);
       const codes = window.ComCalSchedule.extractCourseCodes(text);
-      const weekday = weekdayForSolusX(blocks[index].cx, dayHeaders);
+      const weekday = weekdayForSolusX(block.cx, dayHeaders);
       if (weekday == null) continue;
 
-      const geoTimes = (() => {
-        const startMinutes = minutesFromSolusY(blocks[index].y0, solusTop, solusBottom);
-        const endMinutes = minutesFromSolusY(blocks[index].y1, solusTop, solusBottom);
-        if (startMinutes != null && endMinutes != null && endMinutes > startMinutes + 20) {
-          return { startMinutes, endMinutes };
-        }
-        return null;
-      })();
+      const startMinutes = timeScale.minutesAt(block.y0);
+      const endMinutes = timeScale.minutesAt(block.y1);
+      const geoTimes =
+        startMinutes != null && endMinutes != null && endMinutes > startMinutes + 20
+          ? { startMinutes, endMinutes }
+          : null;
 
       const pushOne = (title, times, location, activity) => {
-        const clean = cleanImportedTitle(title);
-        if (!clean || !times) return;
+        const clean = cleanImportedTitle(title) || "Class";
+        if (!times) return;
         blockTemplates.push({
           weekday,
           startMinutes: times.startMinutes,
@@ -559,11 +704,12 @@ async function recognizeImage(file, onProgress) {
         });
       };
 
+      // Prefer times from the left gutter / block position; OCR times inside tiles are optional.
       if (meetings.length) {
         meetings.forEach((meeting) => {
           pushOne(
             meeting.title,
-            {
+            geoTimes || {
               startMinutes: meeting.startMinutes,
               endMinutes: meeting.endMinutes,
             },
@@ -574,8 +720,15 @@ async function recognizeImage(file, onProgress) {
         continue;
       }
 
-      let times = window.ComCalSchedule.parseTimeRange(text) || geoTimes;
-      pushOne(codes[0] || "", times, window.ComCalSchedule.parseLocation(text), "");
+      const title = pickCourseTitle(text, codes, meetings);
+      const times = geoTimes || window.ComCalSchedule.parseTimeRange(text);
+      const looksReal =
+        Boolean(title) ||
+        bestScore >= 1 ||
+        /Lecture|Tutorial|Lab|Goodes|Waiting|Instructor/i.test(text);
+      if (times && looksReal) {
+        pushOne(title || "Class", times, window.ComCalSchedule.parseLocation(text), "");
+      }
     }
 
     const pageTemplates = templatesFromPageWords(fullWords, dayHeaders);
@@ -583,10 +736,11 @@ async function recognizeImage(file, onProgress) {
     return {
       text: `${headerText}\n${fullText}\n${blockTemplates.map((item) => item.title).join("\n")}`,
       words: fullWords,
-      blocks,
+      blocks: classBlocks,
       blockTemplates,
       pageTemplates,
       dayHeaders,
+      timeScale: timeScale.source,
     };
   } finally {
     await worker.terminate();

@@ -239,6 +239,12 @@ function parseIcs(text) {
 
 const FAKE_COURSE_SUBJECTS = new Set([
   "HALL",
+  "HAL",
+  "HAT",
+  "ALL",
+  "GOO",
+  "GOOD",
+  "DES",
   "ROOM",
   "BLDG",
   "UNIT",
@@ -262,7 +268,14 @@ const FAKE_COURSE_SUBJECTS = new Set([
   "THAT",
   "WITH",
   "YOUR",
+  "SHOW",
+  "WEEK",
+  "SEPT",
+  "SEP",
 ]);
+
+const PREFERRED_SUBJECTS =
+  /^(COMM|CISC|MATH|ECON|EMPR|HIST|PHIL|PSYC|BIOL|CHEM|PHYS|DEVS|FILM|MUSC|RELS|POLS|SOCY|GNDS|INTS|ENGL|FREN|SPAN|LLCU|ANAT|PHGY|KNPE|HLTH|NURS|LAW|MBA|ARTS|ASCX|AGHE|BIOM|CANC|CLST|COCA|CWRI|DRAM|EERL|ENSC|EPID|GPHY|GRMN|HLTH|IDIS|IRISH|ITAL|JAPN|LANG|LATN|LING|MARS|MGMT|MUTH|PPEC|PORT|STAT)\b/i;
 
 function extractCourseCodes(text) {
   const codes = new Set();
@@ -271,7 +284,8 @@ function extractCourseCodes(text) {
     if (FAKE_COURSE_SUBJECTS.has(match[1])) continue;
     codes.add(`${match[1]} ${match[2]}`);
   }
-  return [...codes];
+  const preferred = [...codes].filter((code) => PREFERRED_SUBJECTS.test(code));
+  return preferred.length ? preferred : [...codes];
 }
 
 function normalizeScheduleText(text) {
