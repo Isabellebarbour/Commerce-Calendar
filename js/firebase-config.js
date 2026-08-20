@@ -1,23 +1,19 @@
 /**
  * Firebase web config for ComCal.
  *
- * Setup (once):
- * 1. https://console.firebase.google.com → create a project
- * 2. Authentication → Sign-in method → enable Email/Password
- * 3. Project settings → Your apps → Web → copy the config below
- * 4. Firestore Database → create database → paste rules from firestore.rules
- * 5. Authentication → Settings → Authorized domains → add smithcommercecalendar.com
- *    and isabellebarbour.github.io
- *
- * Replace the placeholder strings with your real Firebase values.
+ * Also ensure in Firebase Console:
+ * - Authentication → Email/Password enabled
+ * - Firestore rules published from firestore.rules
+ * - Authorized domains include smithcommercecalendar.com and isabellebarbour.github.io
  */
 window.ComCalFirebaseConfig = {
-  apiKey: "PASTE_API_KEY",
-  authDomain: "PASTE_PROJECT_ID.firebaseapp.com",
-  projectId: "PASTE_PROJECT_ID",
-  storageBucket: "PASTE_PROJECT_ID.appspot.com",
-  messagingSenderId: "PASTE_SENDER_ID",
-  appId: "PASTE_APP_ID",
+  apiKey: "AIzaSyA4XlItLho6N5iPl2Ng5ZlCdb6_azc5kkE",
+  authDomain: "commerce-calendar.firebaseapp.com",
+  projectId: "commerce-calendar",
+  storageBucket: "commerce-calendar.firebasestorage.app",
+  messagingSenderId: "348610196285",
+  appId: "1:348610196285:web:aaf1121388cdb4bb7b4b54",
+  measurementId: "G-1529HD00PX",
 };
 
 window.ComCalFirebaseConfigured = function ComCalFirebaseConfigured() {
