@@ -463,6 +463,7 @@ function applyImportedEvents(events, templates, term, sourceLabel) {
     (event) => event.source === "assignment" || event.source === "exam"
   );
   window.ComCalSchedule.save([...events, ...kept]);
+  window.ComCalTopics.clearDismissedTopics?.();
   window.ComCalTopics.syncCourseTopics(events);
   window.ComCalAssignments?.syncFromSchedule(events);
   const result = window.ComCalCurriculum?.markFromSchedule(events) || { planned: 0 };
@@ -1212,7 +1213,11 @@ function openTopicEditor(topicId) {
   nameInput.readOnly = nameLocked;
   nameInput.disabled = nameLocked;
   document.getElementById("topic-edit-error").hidden = true;
-  document.getElementById("topic-edit-delete").hidden = isCreate || topic.type !== "custom";
+  const canDelete =
+    !isCreate && ["custom", "other", "course"].includes(topic.type);
+  const deleteBtn = document.getElementById("topic-edit-delete");
+  deleteBtn.hidden = !canDelete;
+  deleteBtn.textContent = "Delete topic";
   fillTopicColorGrid(color);
   setTopicEditorColor(color, { customOpen: false });
   setTopicColorPanelOpen(false);
@@ -1296,6 +1301,9 @@ document.getElementById("topic-edit-save")?.addEventListener("click", () => {
 
 document.getElementById("topic-edit-delete")?.addEventListener("click", () => {
   if (!editingTopicId) return;
+  const topic = window.ComCalTopics.topicById(editingTopicId);
+  const label = topic?.name || "this topic";
+  if (!confirm(`Delete “${label}” from your calendars list?`)) return;
   window.ComCalTopics.removeTopic(editingTopicId);
   closeTopicEditor();
   reloadEvents();

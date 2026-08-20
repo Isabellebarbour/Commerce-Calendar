@@ -1,5 +1,6 @@
 const TOPIC_STORAGE = "comcal-topics";
 const EVENT_EDIT_STORAGE = "comcal-event-edits";
+const DISMISSED_TOPIC_STORAGE = "comcal-dismissed-topics";
 const SESSIONAL_ID = "sessional";
 const SESSIONAL_COLOR = "#071e49";
 const ASSIGNMENTS_ID = "assignments";
@@ -18,6 +19,34 @@ const COURSE_COLORS = [
   "#F87171",
   "#818CF8",
 ];
+
+function loadDismissedTopics() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(DISMISSED_TOPIC_STORAGE)) || []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveDismissedTopics(ids) {
+  localStorage.setItem(DISMISSED_TOPIC_STORAGE, JSON.stringify([...ids]));
+  window.ComCalCloud?.notifyChanged?.();
+}
+
+function dismissTopic(id) {
+  const next = loadDismissedTopics();
+  next.add(id);
+  saveDismissedTopics(next);
+}
+
+function clearDismissedTopics() {
+  localStorage.removeItem(DISMISSED_TOPIC_STORAGE);
+  window.ComCalCloud?.notifyChanged?.();
+}
+
+function isTopicDismissed(id) {
+  return loadDismissedTopics().has(id);
+}
 
 function loadTopics() {
   try {
@@ -188,7 +217,7 @@ function syncCourseTopics(events) {
 
   codes.forEach((code) => {
     const id = courseTopicId(code);
-    if (topics.some((topic) => topic.id === id)) return;
+    if (topics.some((topic) => topic.id === id) || isTopicDismissed(id)) return;
     topics.push({
       id,
       name: code,
@@ -200,7 +229,7 @@ function syncCourseTopics(events) {
   });
 
   const hasOther = events.some((event) => inferredTopicId(event) === "other");
-  if (hasOther && !topics.some((topic) => topic.id === "other")) {
+  if (hasOther && !topics.some((topic) => topic.id === "other") && !isTopicDismissed("other")) {
     topics.push({
       id: "other",
       name: "Other",
@@ -232,8 +261,12 @@ function addTopic(name, color) {
 
 function removeTopic(id) {
   if (id === SESSIONAL_ID || id === ASSIGNMENTS_ID || id === EXAMS_ID) return;
-  const topics = getTopics().filter((topic) => topic.id !== id);
+  const topic = getTopics().find((row) => row.id === id);
+  const topics = getTopics().filter((row) => row.id !== id);
   saveTopics(topics);
+  if (topic && (topic.type === "other" || topic.type === "course" || topic.type === "custom")) {
+    dismissTopic(id);
+  }
   const edits = loadEdits();
   Object.keys(edits).forEach((eventId) => {
     if (edits[eventId].topicId === id) delete edits[eventId].topicId;
@@ -266,7 +299,8 @@ function renameTopic(id, name) {
 }
 
 function removeCourseTopics() {
-  saveTopics(getTopics().filter((topic) => topic.type !== "course"));
+  clearDismissedTopics();
+  saveTopics(getTopics().filter((topic) => topic.type !== "course" && topic.type !== "other"));
 }
 
 function decorate(events) {
@@ -372,6 +406,7 @@ window.ComCalTopics = {
   renameTopic,
   removeCourseTopics,
   syncCourseTopics,
+  clearDismissedTopics,
   decorate,
   visibleEvents,
   saveEventPatch,
