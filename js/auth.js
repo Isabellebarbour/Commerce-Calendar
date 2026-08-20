@@ -1,74 +1,22 @@
-const USERS_STORAGE = "comcal-users";
-const SESSION_STORAGE = "comcal-session";
+const PROFILE_META_STORAGE = "comcal-session-meta";
 
-function loadUsers() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(USERS_STORAGE) || "[]");
-    return Array.isArray(raw) ? raw : [];
-  } catch {
-    return [];
+let cachedSession = null;
+let authReadyResolve;
+const authReady = new Promise((resolve) => {
+  authReadyResolve = resolve;
+});
+
+function requireFirebase() {
+  if (!window.ComCalFirebaseConfigured?.()) {
+    throw new Error(
+      "Cloud accounts are not set up yet. Add your Firebase web config in js/firebase-config.js (see that file for steps)."
+    );
   }
-}
-
-function saveUsers(users) {
-  localStorage.setItem(USERS_STORAGE, JSON.stringify(users));
-}
-
-function getSession() {
-  try {
-    return JSON.parse(localStorage.getItem(SESSION_STORAGE) || "null");
-  } catch {
-    return null;
+  const auth = window.ComCalFirebase?.auth;
+  if (!auth) {
+    throw new Error("Firebase Auth is not ready. Check your connection and firebase-config.js.");
   }
-}
-
-function setSession(session) {
-  if (!session) {
-    localStorage.removeItem(SESSION_STORAGE);
-    return;
-  }
-  localStorage.setItem(SESSION_STORAGE, JSON.stringify(session));
-}
-
-function bufferToHex(buffer) {
-  return [...new Uint8Array(buffer)]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-function hexToBuffer(hex) {
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < bytes.length; i += 1) {
-    bytes[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  }
-  return bytes.buffer;
-}
-
-async function hashPassword(password, saltHex) {
-  const salt = saltHex
-    ? new Uint8Array(hexToBuffer(saltHex))
-    : crypto.getRandomValues(new Uint8Array(16));
-  const keyMaterial = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(password),
-    "PBKDF2",
-    false,
-    ["deriveBits"]
-  );
-  const bits = await crypto.subtle.deriveBits(
-    {
-      name: "PBKDF2",
-      salt,
-      iterations: 120000,
-      hash: "SHA-256",
-    },
-    keyMaterial,
-    256
-  );
-  return {
-    salt: bufferToHex(salt.buffer || salt),
-    hash: bufferToHex(bits),
-  };
+  return auth;
 }
 
 function normalizeEmail(email) {
@@ -77,7 +25,81 @@ function normalizeEmail(email) {
     .toLowerCase();
 }
 
+function loadMeta() {
+  try {
+    return JSON.parse(localStorage.getItem(PROFILE_META_STORAGE) || "null") || {};
+  } catch {
+    return {};
+  }
+}
+
+function saveMeta(meta) {
+  if (!meta) {
+    localStorage.removeItem(PROFILE_META_STORAGE);
+    return;
+  }
+  localStorage.setItem(PROFILE_META_STORAGE, JSON.stringify(meta));
+}
+
+function sessionFromUser(user, meta = {}) {
+  if (!user) return null;
+  const stored = { ...loadMeta(), ...meta };
+  const name =
+    stored.name ||
+    user.displayName ||
+    [stored.firstName, stored.lastName].filter(Boolean).join(" ") ||
+    "";
+  return {
+    userId: user.uid,
+    email: user.email || stored.email || "",
+    name,
+    graduationDate: stored.graduationDate || "",
+    firstName: stored.firstName || "",
+    lastName: stored.lastName || "",
+  };
+}
+
+function setCachedSession(session) {
+  cachedSession = session;
+  if (session) {
+    saveMeta({
+      name: session.name || "",
+      email: session.email || "",
+      graduationDate: session.graduationDate || "",
+      firstName: session.firstName || "",
+      lastName: session.lastName || "",
+    });
+  }
+}
+
+async function writeUserProfile(uid, profile) {
+  const db = window.ComCalFirebase?.db;
+  if (!db || !uid) return;
+  await db
+    .collection("users")
+    .doc(uid)
+    .set(
+      {
+        email: profile.email || "",
+        name: profile.name || "",
+        firstName: profile.firstName || "",
+        lastName: profile.lastName || "",
+        graduationDate: profile.graduationDate || "",
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+}
+
+async function readUserProfile(uid) {
+  const db = window.ComCalFirebase?.db;
+  if (!db || !uid) return {};
+  const snap = await db.collection("users").doc(uid).get();
+  return snap.exists ? snap.data() || {} : {};
+}
+
 async function signUp({ firstName, lastName, graduationDate, email, password }) {
+  const auth = requireFirebase();
   const cleanedEmail = normalizeEmail(email);
   const cleanedFirst = String(firstName || "").trim();
   const cleanedLast = String(lastName || "").trim();
@@ -94,64 +116,140 @@ async function signUp({ firstName, lastName, graduationDate, email, password }) 
     throw new Error("Password must be at least 8 characters.");
   }
 
-  const users = loadUsers();
-  if (users.some((user) => user.email === cleanedEmail)) {
-    throw new Error("An account with that email already exists. Try signing in.");
+  let credential;
+  try {
+    credential = await auth.createUserWithEmailAndPassword(cleanedEmail, password);
+  } catch (error) {
+    if (error.code === "auth/email-already-in-use") {
+      throw new Error("An account with that email already exists. Try signing in.");
+    }
+    if (error.code === "auth/weak-password") {
+      throw new Error("Password must be at least 8 characters.");
+    }
+    if (error.code === "auth/invalid-email") {
+      throw new Error("Enter a valid email address.");
+    }
+    throw new Error(error.message || "Could not create account.");
   }
 
-  const { salt, hash } = await hashPassword(password);
-  const user = {
-    id: crypto.randomUUID(),
+  const user = credential.user;
+  try {
+    await user.updateProfile({ displayName: cleanedName });
+  } catch {
+    /* non-fatal */
+  }
+
+  const profile = {
+    email: cleanedEmail,
     name: cleanedName,
     firstName: cleanedFirst,
     lastName: cleanedLast,
     graduationDate: cleanedGrad,
-    email: cleanedEmail,
-    salt,
-    hash,
-    createdAt: new Date().toISOString(),
   };
-  users.push(user);
-  saveUsers(users);
-
-  const session = {
-    userId: user.id,
-    email: user.email,
-    name: user.name,
-    graduationDate: user.graduationDate,
-  };
-  setSession(session);
+  await writeUserProfile(user.uid, profile);
+  const session = sessionFromUser(user, profile);
+  setCachedSession(session);
+  await window.ComCalCloud?.onSignedIn?.(user.uid);
   return session;
 }
 
 async function logIn({ email, password }) {
+  const auth = requireFirebase();
   const cleanedEmail = normalizeEmail(email);
-  const users = loadUsers();
-  const user = users.find((row) => row.email === cleanedEmail);
-  if (!user) throw new Error("No account found for that email.");
+  if (!cleanedEmail || !password) {
+    throw new Error("Enter your email and password.");
+  }
 
-  const { hash } = await hashPassword(password, user.salt);
-  if (hash !== user.hash) throw new Error("Incorrect password.");
+  let credential;
+  try {
+    credential = await auth.signInWithEmailAndPassword(cleanedEmail, password);
+  } catch (error) {
+    if (error.code === "auth/user-not-found") {
+      throw new Error("No account found for that email.");
+    }
+    if (error.code === "auth/wrong-password" || error.code === "auth/invalid-credential") {
+      throw new Error("Incorrect password.");
+    }
+    if (error.code === "auth/too-many-requests") {
+      throw new Error("Too many attempts. Try again later.");
+    }
+    throw new Error(error.message || "Could not sign in.");
+  }
 
-  const session = {
-    userId: user.id,
-    email: user.email,
-    name: user.name,
-    graduationDate: user.graduationDate || "",
-  };
-  setSession(session);
+  const user = credential.user;
+  const remote = await readUserProfile(user.uid);
+  const session = sessionFromUser(user, {
+    name: remote.name || user.displayName || "",
+    firstName: remote.firstName || "",
+    lastName: remote.lastName || "",
+    graduationDate: remote.graduationDate || "",
+    email: user.email || cleanedEmail,
+  });
+  setCachedSession(session);
+  await window.ComCalCloud?.onSignedIn?.(user.uid);
   return session;
 }
 
-function logOut() {
-  setSession(null);
+async function logOut() {
+  const auth = window.ComCalFirebase?.auth;
+  try {
+    if (auth) await auth.signOut();
+  } catch {
+    /* ignore */
+  }
+  setCachedSession(null);
+  saveMeta(null);
+  window.ComCalCloud?.clearLocalUserData?.();
+}
+
+function getSession() {
+  if (cachedSession) return cachedSession;
+  const user = window.ComCalFirebase?.auth?.currentUser;
+  if (!user) return null;
+  cachedSession = sessionFromUser(user);
+  return cachedSession;
 }
 
 function isLoggedIn() {
-  const session = getSession();
-  if (!session?.userId) return false;
-  return loadUsers().some((user) => user.id === session.userId);
+  return Boolean(window.ComCalFirebase?.auth?.currentUser || cachedSession?.userId);
 }
+
+function whenReady() {
+  return authReady;
+}
+
+function bindAuthState() {
+  const auth = window.ComCalFirebase?.auth;
+  if (!auth) {
+    authReadyResolve();
+    return;
+  }
+
+  auth.onAuthStateChanged(async (user) => {
+    if (!user) {
+      setCachedSession(null);
+      authReadyResolve();
+      return;
+    }
+    try {
+      const remote = await readUserProfile(user.uid);
+      setCachedSession(
+        sessionFromUser(user, {
+          name: remote.name || user.displayName || "",
+          firstName: remote.firstName || "",
+          lastName: remote.lastName || "",
+          graduationDate: remote.graduationDate || "",
+          email: user.email || "",
+        })
+      );
+    } catch {
+      setCachedSession(sessionFromUser(user));
+    }
+    authReadyResolve();
+  });
+}
+
+bindAuthState();
 
 window.ComCalAuth = {
   signUp,
@@ -159,4 +257,5 @@ window.ComCalAuth = {
   logOut,
   getSession,
   isLoggedIn,
+  whenReady,
 };

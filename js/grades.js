@@ -92,6 +92,7 @@ function loadGrades() {
 
 function saveGrades() {
   localStorage.setItem(GRADES_STORAGE, JSON.stringify(gradesState));
+  window.ComCalCloud?.notifyChanged?.();
 }
 
 function escapeGrades(value) {
@@ -1392,6 +1393,11 @@ window.ComCalGrades = {
   load: () => gradesState,
   parseTranscriptText,
   parseTranscriptDocument,
+  reloadFromStorage() {
+    gradesState = loadGrades();
+    window.__comcalGradesState = gradesState;
+    render();
+  },
 };
 
 render();

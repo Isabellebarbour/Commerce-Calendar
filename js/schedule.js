@@ -44,6 +44,7 @@ function loadScheduleEvents() {
 
 function saveScheduleEvents(events) {
   localStorage.setItem(EVENT_STORAGE, JSON.stringify(events));
+  window.ComCalCloud?.notifyChanged?.();
 }
 
 function unfoldIcs(text) {

@@ -4,14 +4,14 @@ const PHOTO_STORAGE = "comcal-profile-photo";
 const DEFAULT_BANNER = "assets/profile-banner.png";
 
 const DEFAULT_PROFILE = {
-  name: "Isabelle Barbour",
-  email: "23pjr@queensu.ca",
-  program: "BCOM – Spring 2028, BCom",
+  name: "",
+  email: "",
+  program: "",
 };
 
 function loadProfile() {
   try {
-    return { ...DEFAULT_PROFILE, ...(JSON.parse(localStorage.getItem(PROFILE_STORAGE)) || {}) };
+    return { ...DEFAULT_PROFILE, ...(JSON.parse(localStorage.getItem(PROFILE_STORAGE) || "{}") || {}) };
   } catch {
     return { ...DEFAULT_PROFILE };
   }
@@ -27,6 +27,7 @@ function loadBanner() {
 
 function saveBanner(value) {
   localStorage.setItem(BANNER_STORAGE, value);
+  window.ComCalCloud?.notifyChanged?.();
 }
 
 function loadPhoto() {
@@ -42,6 +43,7 @@ function loadPhoto() {
 
 function savePhoto(value) {
   localStorage.setItem(PHOTO_STORAGE, value);
+  window.ComCalCloud?.notifyChanged?.();
 }
 
 function readImageFile(file, onLoad) {

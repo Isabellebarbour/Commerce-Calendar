@@ -241,6 +241,7 @@ function loadCurriculum() {
 
 function saveCurriculum() {
   localStorage.setItem(CURR_STORAGE, JSON.stringify(currState));
+  window.ComCalCloud?.notifyChanged?.();
 }
 
 function slotCount(units) {

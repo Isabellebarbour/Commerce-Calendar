@@ -100,6 +100,7 @@ function stripLegacySeedItems(state) {
   });
   if (changed) {
     localStorage.setItem(ASGN_STORAGE, JSON.stringify(state));
+    window.ComCalCloud?.notifyChanged?.();
   }
   return state;
 }
@@ -107,6 +108,7 @@ function stripLegacySeedItems(state) {
 function saveAssignments() {
   localStorage.setItem(ASGN_STORAGE, JSON.stringify(asgnState));
   syncAssignmentsToCalendar();
+  window.ComCalCloud?.notifyChanged?.();
 }
 
 function assignmentEventId(itemId) {
@@ -760,6 +762,14 @@ function eventElement(event) {
   return target?.parentElement || null;
 }
 
+function reloadFromStorage() {
+  asgnState = loadAssignments();
+  window.__comcalAsgnState = asgnState;
+  syncAssignmentsToCalendar();
+  renderAssignments();
+  refreshHome();
+}
+
 window.ComCalAssignments = {
   render: renderAssignments,
   refreshHome,
@@ -767,6 +777,7 @@ window.ComCalAssignments = {
   upcoming: upcomingAssignments,
   selectYear,
   selectCourse,
+  reloadFromStorage,
   load: () => asgnState,
 };
 window.selectYear = selectYear;

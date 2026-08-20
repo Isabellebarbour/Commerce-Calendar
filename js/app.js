@@ -115,6 +115,7 @@ function applySessionToProfile(session) {
       program: program || raw.program || "",
     };
     localStorage.setItem("comcal-profile", JSON.stringify(next));
+    window.ComCalCloud?.notifyChanged?.();
   } catch {
     /* ignore */
   }
@@ -246,13 +247,29 @@ function bindAuthUi() {
       closeAuthModal();
     }
   });
-  document.getElementById("app-logout")?.addEventListener("click", () => {
-    window.ComCalAuth.logOut();
-    showLanding();
+  document.getElementById("app-logout")?.addEventListener("click", async () => {
+    await window.ComCalAuth.logOut();
+    location.reload();
   });
 }
 
 bindAuthUi();
 bindLandingParallax();
-refreshAuthGate();
-setTimeout(initPageFromHash, 0);
+
+async function bootAuthGate() {
+  try {
+    await window.ComCalAuth?.whenReady?.();
+  } catch {
+    /* continue offline gate */
+  }
+  if (window.ComCalAuth?.isLoggedIn()) {
+    const session = window.ComCalAuth.getSession();
+    if (session?.userId) {
+      await window.ComCalCloud?.onSignedIn?.(session.userId);
+    }
+  }
+  refreshAuthGate();
+  setTimeout(initPageFromHash, 0);
+}
+
+bootAuthGate();

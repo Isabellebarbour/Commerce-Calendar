@@ -29,6 +29,7 @@ function loadTopics() {
 
 function saveTopics(topics) {
   localStorage.setItem(TOPIC_STORAGE, JSON.stringify(topics));
+  window.ComCalCloud?.notifyChanged?.();
 }
 
 function loadEdits() {
@@ -41,6 +42,7 @@ function loadEdits() {
 
 function saveEdits(edits) {
   localStorage.setItem(EVENT_EDIT_STORAGE, JSON.stringify(edits));
+  window.ComCalCloud?.notifyChanged?.();
 }
 
 function courseTopicId(code) {
