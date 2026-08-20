@@ -266,7 +266,7 @@ const FAKE_COURSE_SUBJECTS = new Set([
 
 function extractCourseCodes(text) {
   const codes = new Set();
-  const source = String(text).toUpperCase().replaceAll("-", " ");
+  const source = normalizeScheduleText(text).toUpperCase().replaceAll("-", " ");
   for (const match of source.matchAll(new RegExp(COURSE_CODE_PATTERN, "g"))) {
     if (FAKE_COURSE_SUBJECTS.has(match[1])) continue;
     codes.add(`${match[1]} ${match[2]}`);
@@ -278,7 +278,10 @@ function normalizeScheduleText(text) {
   return String(text)
     .replace(/\bC0MM\b/gi, "COMM")
     .replace(/\bC0M\b/gi, "COM")
+    .replace(/\bconn\b/gi, "COMM")
+    .replace(/\b([A-Za-z]{3,4})(\d{3}[A-Za-z]?)\b/g, "$1 $2")
     .replace(/\b([A-Z]{3,4})\s*0(\d{2}[A-Z]?)\b/g, "$1 1$2")
+    .replace(/\bWaiting:\s*/gi, "")
     .replace(/[|•·]/g, " ")
     .replace(/\u00a0/g, " ");
 }
@@ -312,11 +315,17 @@ function buildTimeRange(match) {
 }
 
 function parseTimeRange(text) {
+  const normalized = String(text || "")
+    .replace(/\b([1-9]|1[0-2])([0-5]\d)\s*([AaPp])\.?\s*[Mm]\b/g, "$1:$2$3M")
+    .replace(/(\d{1,2})\s*[.:]\s*(\d{2})\s*([AaPp])\s*\.?\s*[Mm]/gi, "$1:$2$3M")
+    .replace(/(\d{1,2})\s+(\d{2})\s*([AaPp][Mm])/gi, "$1:$2$3")
+    .replace(/(\d{1,2}:\d{2}\s*[AaPp][Mm])\s*[–—−-]+\s*(\d{1,2}:\d{2}\s*[AaPp][Mm])/gi, "$1 - $2");
   const pattern =
     /(\d{1,2})\s*[:.]\s*(\d{2})\s*([AaPp][Mm])?\s*[-–—to]+\s*(\d{1,2})\s*[:.]\s*(\d{2})\s*([AaPp][Mm])?/gi;
   let best = null;
-  for (const match of String(text).matchAll(pattern)) {
+  for (const match of normalized.matchAll(pattern)) {
     const parsed = buildTimeRange(match);
+    if (parsed.startMinutes >= 24 * 60 || parsed.endMinutes > 36 * 60) continue;
     if (parsed.hasMeridiem) return parsed;
     if (!best) best = parsed;
   }
@@ -341,19 +350,22 @@ function extractSolusMeetings(raw) {
     "gi"
   );
   const meetings = [];
+  const seen = new Set();
   for (const match of text.matchAll(pattern)) {
     if (FAKE_COURSE_SUBJECTS.has(match[1].toUpperCase())) continue;
     const times = parseTimeRange(match[5]);
     if (!times) continue;
-    const title = `${match[1].toUpperCase()} ${match[2].toUpperCase()}`.replace(/^\s*Waiting:\s*/i, "");
+    const title = `${match[1].toUpperCase()} ${match[2].toUpperCase()}`;
     const activity = match[4] || "";
     const before = text.slice(Math.max(0, match.index - 28), match.index);
-    // Don't inherit weekdays from SOLUS column headers sitting above the grid in OCR order
     const beforeClean = before.replace(
       /\b(sunday|monday|tuesday|wednesday|thursday|friday|saturday|sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat)\b/gi,
       " "
     );
     const after = text.slice(match.index, match.index + match[0].length + 28);
+    const key = `${title}|${times.startMinutes}|${times.endMinutes}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
     meetings.push({
       title,
       section: match[3] || "",
@@ -365,6 +377,33 @@ function extractSolusMeetings(raw) {
       index: match.index,
       raw: match[0],
     });
+  }
+
+  // OCR often separates title lines from times. Pair each course code with the next time range.
+  if (!meetings.length) {
+    const codeRe = new RegExp(COURSE_CODE_PATTERN, "gi");
+    for (const match of text.matchAll(codeRe)) {
+      if (FAKE_COURSE_SUBJECTS.has(match[1].toUpperCase())) continue;
+      const title = `${match[1].toUpperCase()} ${match[2].toUpperCase()}`;
+      const windowText = text.slice(match.index, match.index + 260);
+      const times = parseTimeRange(windowText);
+      if (!times) continue;
+      const activityMatch = windowText.match(/\b(Lecture|Tutorial|Lab|Seminar|Studio)\b/i);
+      const key = `${title}|${times.startMinutes}|${times.endMinutes}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      meetings.push({
+        title,
+        section: "",
+        activity: activityMatch ? activityMatch[1] : "",
+        startMinutes: times.startMinutes,
+        endMinutes: times.endMinutes,
+        location: parseLocation(windowText),
+        weekdays: [],
+        index: match.index,
+        raw: windowText.slice(0, 80),
+      });
+    }
   }
   return meetings;
 }

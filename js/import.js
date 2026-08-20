@@ -75,32 +75,54 @@ function upscaleImage(image) {
 }
 
 function isClassFill(r, g, b) {
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  if (max < 120 || min > 252) return false;
-  // SOLUS mint/green tiles (allow JPEG washout)
-  if (g >= r && g >= b - 8 && g > 130 && g - Math.min(r, b) >= 8) return true;
-  if (g > r + 4 && g > b + 2 && g > 125) return true;
-  if (b > r + 8 && b >= g - 12 && b > 150 && r > 100) return true;
+  // Prefer SOLUS sage tiles (~187,208,153). Loose greens merge adjacent columns.
+  if (r >= 150 && r <= 220 && g >= 175 && g <= 240 && b >= 110 && b <= 195 && g >= r + 6 && g >= b + 10) {
+    return true;
+  }
+  if (g > r + 8 && g > b + 6 && g > 140 && g < 235 && r > 120 && b > 100) return true;
   return false;
+}
+
+function erodeMask(mask, width, height, rounds = 2) {
+  let current = mask;
+  for (let round = 0; round < rounds; round += 1) {
+    const next = new Uint8Array(current.length);
+    for (let y = 1; y < height - 1; y += 1) {
+      for (let x = 1; x < width - 1; x += 1) {
+        const i = y * width + x;
+        if (
+          current[i] &&
+          current[i - 1] &&
+          current[i + 1] &&
+          current[i - width] &&
+          current[i + width]
+        ) {
+          next[i] = 1;
+        }
+      }
+    }
+    current = next;
+  }
+  return current;
 }
 
 function findClassBlocks(canvas) {
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   const { width, height } = canvas;
   const { data } = ctx.getImageData(0, 0, width, height);
+  const raw = new Uint8Array(width * height);
+  for (let i = 0, p = 0; i < data.length; i += 4, p += 1) {
+    raw[p] = isClassFill(data[i], data[i + 1], data[i + 2]) ? 1 : 0;
+  }
+  // Erode so touching day-column tiles don't flood into one blob.
+  const mask = erodeMask(raw, width, height, 3);
   const visited = new Uint8Array(width * height);
   const boxes = [];
-
-  const at = (x, y) => {
-    const i = (y * width + x) * 4;
-    return isClassFill(data[i], data[i + 1], data[i + 2]);
-  };
 
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       const start = y * width + x;
-      if (visited[start] || !at(x, y)) continue;
+      if (visited[start] || !mask[start]) continue;
       const stack = [start];
       visited[start] = 1;
       let minX = x;
@@ -117,23 +139,23 @@ function findClassBlocks(canvas) {
         if (px > maxX) maxX = px;
         if (py < minY) minY = py;
         if (py > maxY) maxY = py;
-        const neighbors = [p + 1, p - 1, p + width, p - width];
-        neighbors.forEach((next) => {
-          if (next < 0 || next >= visited.length || visited[next]) return;
+        [p + 1, p - 1, p + width, p - width].forEach((next) => {
+          if (next < 0 || next >= visited.length || visited[next] || !mask[next]) return;
           const nx = next % width;
           const ny = (next / width) | 0;
           if (Math.abs(nx - px) + Math.abs(ny - py) !== 1) return;
-          if (at(nx, ny)) {
-            visited[next] = 1;
-            stack.push(next);
-          } else {
-            visited[next] = 1;
-          }
+          visited[next] = 1;
+          stack.push(next);
         });
       }
+      // Expand back the erosion margin so text near edges stays in the crop.
+      minX = Math.max(0, minX - 3);
+      minY = Math.max(0, minY - 3);
+      maxX = Math.min(width - 1, maxX + 3);
+      maxY = Math.min(height - 1, maxY + 3);
       const bw = maxX - minX + 1;
       const bh = maxY - minY + 1;
-      if (count > 220 && bw > 28 && bh > 18 && bw < width * 0.5 && bh < height * 0.6) {
+      if (count > 80 && bw > 20 && bh > 14 && bw < width * 0.28 && bh < height * 0.45) {
         boxes.push({
           x0: minX,
           y0: minY,
@@ -145,10 +167,76 @@ function findClassBlocks(canvas) {
       }
     }
   }
-  return boxes;
+
+  // Split blobs that still span two day columns.
+  const widths = boxes.map((box) => box.x1 - box.x0 + 1).sort((a, b) => a - b);
+  const typical = widths[Math.floor(widths.length / 2)] || width / 8;
+  const split = [];
+  boxes.forEach((box) => {
+    const bw = box.x1 - box.x0 + 1;
+    if (bw > typical * 1.55) {
+      const mid = Math.round((box.x0 + box.x1) / 2);
+      split.push(
+        {
+          x0: box.x0,
+          y0: box.y0,
+          x1: mid - 1,
+          y1: box.y1,
+          cx: (box.x0 + mid - 1) / 2,
+          cy: box.cy,
+        },
+        {
+          x0: mid,
+          y0: box.y0,
+          x1: box.x1,
+          y1: box.y1,
+          cx: (mid + box.x1) / 2,
+          cy: box.cy,
+        }
+      );
+    } else {
+      split.push(box);
+    }
+  });
+  return split.filter((box) => box.x1 - box.x0 >= 18 && box.y1 - box.y0 >= 12);
 }
 
-function cropCanvas(source, box, pad = 6, { binarize = false } = {}) {
+function contrastCanvas(source) {
+  const canvas = document.createElement("canvas");
+  canvas.width = source.width;
+  canvas.height = source.height;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(source, 0, 0);
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imageData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    const contrast = 1.8;
+    data[i] = Math.min(255, Math.max(0, (data[i] - 128) * contrast + 128));
+    data[i + 1] = Math.min(255, Math.max(0, (data[i + 1] - 128) * contrast + 128));
+    data[i + 2] = Math.min(255, Math.max(0, (data[i + 2] - 128) * contrast + 128));
+  }
+  ctx.putImageData(imageData, 0, 0);
+  return canvas;
+}
+
+function binarizeCanvas(source, threshold = 155) {
+  const canvas = document.createElement("canvas");
+  canvas.width = source.width;
+  canvas.height = source.height;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(source, 0, 0);
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imageData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    const value = gray < threshold ? 0 : 255;
+    data[i] = data[i + 1] = data[i + 2] = value;
+  }
+  ctx.putImageData(imageData, 0, 0);
+  return canvas;
+}
+
+function cropCanvas(source, box, pad = 6, { binarize = false, contrast = false } = {}) {
   const x0 = Math.max(0, Math.floor(box.x0 - pad));
   const y0 = Math.max(0, Math.floor(box.y0 - pad));
   const x1 = Math.min(source.width, Math.ceil(box.x1 + pad));
@@ -160,16 +248,17 @@ function cropCanvas(source, box, pad = 6, { binarize = false } = {}) {
   ctx.fillStyle = "#fff";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(source, x0, y0, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
-  if (!binarize) return canvas;
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const data = imageData.data;
-  for (let i = 0; i < data.length; i += 4) {
-    const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-    const value = gray < 165 ? 0 : 255;
-    data[i] = data[i + 1] = data[i + 2] = value;
-  }
-  ctx.putImageData(imageData, 0, 0);
+  if (contrast) return contrastCanvas(canvas);
+  if (binarize) return binarizeCanvas(contrastCanvas(canvas), 155);
   return canvas;
+}
+
+/** Map a Y position in the SOLUS week grid to minutes past midnight (8:00–22:00). */
+function minutesFromSolusY(y, gridTop, gridBottom, startMinutes = 8 * 60, endMinutes = 22 * 60) {
+  if (!(gridBottom > gridTop)) return null;
+  const t = Math.max(0, Math.min(1, (y - gridTop) / (gridBottom - gridTop)));
+  const minutes = startMinutes + t * (endMinutes - startMinutes);
+  return Math.round(minutes / 5) * 5;
 }
 
 function dayNameLookup(raw) {
@@ -241,23 +330,90 @@ function dayHeadersFromWords(headerWords) {
 }
 
 /**
- * Prefer OCR day labels when they look like a full week row; otherwise fall back to
- * fixed Mon–Sun columns (SOLUS layout). Partial OCR (e.g. only Saturday) was snapping
- * every class onto Saturday.
+ * Prefer OCR day labels when they include Monday and span the week; otherwise use a
+ * Mon–Sun grid. Incomplete OCR (e.g. only Saturday, or missing Monday) mis-assigns columns.
  */
-function resolveSolusDayHeaders(imageWidth, headerWords) {
+function resolveSolusDayHeaders(imageWidth, headerWords, blocks = []) {
   const fromOcr = dayHeadersFromWords(headerWords);
-  const gutter = estimateSolusGutter(imageWidth, fromOcr);
-  const synthesized = synthesizeSolusDayHeaders(imageWidth, gutter);
-
-  if (fromOcr.length >= 5) {
+  const hasMonday = fromOcr.some((item) => item.day === 1);
+  if (fromOcr.length >= 5 && hasMonday) {
     const xs = fromOcr.map((item) => item.x);
     const span = Math.max(...xs) - Math.min(...xs);
-    if (span > imageWidth * 0.45) return fromOcr;
+    if (span > imageWidth * 0.4) return fromOcr;
   }
 
-  // If OCR found Mon near the left, keep synthesized Mon–Sun (more reliable than sparse OCR).
-  return synthesized;
+  // Fit Mon–Sun from known day headers and/or class-tile centers (empty Monday is common).
+  const anchors = fromOcr.map((item) => ({ day: item.day, x: item.x }));
+  if (blocks.length) {
+    const centers = [...blocks]
+      .map((block) => block.cx)
+      .sort((a, b) => a - b);
+    const clusters = [];
+    centers.forEach((x) => {
+      const last = clusters[clusters.length - 1];
+      if (!last || x - last.x > imageWidth * 0.045) clusters.push({ x, n: 1 });
+      else {
+        last.x = (last.x * last.n + x) / (last.n + 1);
+        last.n += 1;
+      }
+    });
+    if (clusters.length >= 2) {
+      const gaps = [];
+      for (let i = 1; i < clusters.length; i += 1) gaps.push(clusters[i].x - clusters[i - 1].x);
+      gaps.sort((a, b) => a - b);
+      const col = gaps[Math.floor(gaps.length / 2)] || imageWidth / 8;
+      // First occupied cluster is usually Tuesday when Monday is empty.
+      const first = clusters[0].x;
+      let mondayX = first - col;
+      if (fromOcr.some((item) => item.day === 2)) {
+        const tue = fromOcr.find((item) => item.day === 2);
+        mondayX = tue.x - col;
+      } else if (anchors.length >= 2) {
+        const ordered = [...anchors].sort((a, b) => a.x - b.x);
+        const sampleGaps = [];
+        for (let i = 1; i < ordered.length; i += 1) {
+          const dayGap = ordered[i].day - ordered[i - 1].day;
+          if (dayGap > 0) sampleGaps.push((ordered[i].x - ordered[i - 1].x) / dayGap);
+        }
+        if (sampleGaps.length) {
+          sampleGaps.sort((a, b) => a - b);
+          const dayCol = sampleGaps[Math.floor(sampleGaps.length / 2)];
+          const any = ordered[0];
+          mondayX = any.x - (any.day - 1) * dayCol;
+          return Array.from({ length: 7 }, (_, index) => ({
+            day: solusColumnWeekday(index),
+            x: mondayX + index * dayCol,
+          }));
+        }
+      }
+      return Array.from({ length: 7 }, (_, index) => ({
+        day: solusColumnWeekday(index),
+        x: mondayX + index * col,
+      }));
+    }
+  }
+
+  if (anchors.length >= 2) {
+    const ordered = [...anchors].sort((a, b) => a.x - b.x);
+    const sampleGaps = [];
+    for (let i = 1; i < ordered.length; i += 1) {
+      const dayGap = ordered[i].day - ordered[i - 1].day;
+      if (dayGap > 0) sampleGaps.push((ordered[i].x - ordered[i - 1].x) / dayGap);
+    }
+    if (sampleGaps.length) {
+      sampleGaps.sort((a, b) => a - b);
+      const dayCol = sampleGaps[Math.floor(sampleGaps.length / 2)];
+      const any = ordered[0];
+      const mondayX = any.x - (any.day - 1) * dayCol;
+      return Array.from({ length: 7 }, (_, index) => ({
+        day: solusColumnWeekday(index),
+        x: mondayX + index * dayCol,
+      }));
+    }
+  }
+
+  const gutter = estimateSolusGutter(imageWidth, fromOcr);
+  return synthesizeSolusDayHeaders(imageWidth, gutter);
 }
 
 function weekdayForSolusX(x, dayHeaders) {
@@ -304,54 +460,122 @@ async function recognizeImage(file, onProgress) {
 
   const worker = await Tesseract.createWorker("eng");
   try {
-    // Always OCR the full week grid so we can recover if color-block crops fail.
+    // Full-page OCR: raw + high-contrast binarized grid (green-on-green needs the latter).
     const fullResult = await worker.recognize(image);
-    const fullText = fullResult.data.text || "";
-    const fullWords = fullResult.data.words || [];
+    let fullText = fullResult.data.text || "";
+    let fullWords = fullResult.data.words || [];
+
+    const gridTopGuess = blocks.length ? Math.min(...blocks.map((b) => b.y0)) - 30 : Math.round(image.height * 0.08);
+    const gridBottomGuess = blocks.length
+      ? Math.max(...blocks.map((b) => b.y1)) + 40
+      : Math.round(image.height * 0.82);
+    const gridBox = {
+      x0: 0,
+      y0: Math.max(0, gridTopGuess - Math.round(image.height * 0.06)),
+      x1: image.width,
+      y1: Math.min(image.height, Math.max(gridBottomGuess, Math.round(image.height * 0.55))),
+    };
+    const gridBw = cropCanvas(image, gridBox, 0, { binarize: true });
+    const bwResult = await worker.recognize(gridBw);
+    const bwText = bwResult.data.text || "";
+    if ((bwText.match(/COMM|Lecture|Goodes|\d{1,2}:\d{2}\s*[AaPp][Mm]/gi) || []).length >
+      (fullText.match(/COMM|Lecture|Goodes|\d{1,2}:\d{2}\s*[AaPp][Mm]/gi) || []).length) {
+      fullText = `${fullText}\n${bwText}`;
+      fullWords = [...fullWords, ...(bwResult.data.words || [])];
+    } else {
+      fullText = `${fullText}\n${bwText}`;
+    }
 
     let headerText = "";
     let headerWords = [];
     const headerBottom = blocks.length
       ? Math.min(...blocks.map((block) => block.y0))
-      : Math.round(image.height * 0.2);
+      : Math.round(image.height * 0.18);
     if (headerBottom > 20) {
-      const header = cropCanvas(image, { x0: 0, y0: 0, x1: image.width, y1: headerBottom }, 0);
+      const header = cropCanvas(image, { x0: 0, y0: 0, x1: image.width, y1: headerBottom }, 0, {
+        contrast: true,
+      });
       const headerResult = await worker.recognize(header);
       headerText = headerResult.data.text || "";
       headerWords = headerResult.data.words || [];
     }
 
-    const dayHeaders = resolveSolusDayHeaders(image.width, headerWords.length ? headerWords : fullWords);
+    const dayHeaders = resolveSolusDayHeaders(
+      image.width,
+      headerWords.length ? headerWords : fullWords,
+      blocks
+    );
+    const gridTop = blocks.length ? Math.min(...blocks.map((b) => b.y0)) : Math.round(image.height * 0.15);
+    const gridBottom = blocks.length
+      ? Math.max(...blocks.map((b) => b.y1))
+      : Math.round(image.height * 0.8);
+    // Prefer a stable 8am–10pm span when the screenshot includes Display Options below.
+    const solusTop = Math.min(gridTop, Math.round(image.height * 0.12));
+    const solusBottom = Math.max(gridBottom, Math.min(image.height * 0.85, gridBottom + 40));
     const blockTemplates = [];
 
     for (let index = 0; index < blocks.length; index += 1) {
       onProgress?.(`Reading class ${index + 1} of ${blocks.length}…`);
-      const soft = cropCanvas(image, blocks[index], 12, { binarize: false });
-      const hard = cropCanvas(image, blocks[index], 12, { binarize: true });
+      const soft = cropCanvas(image, blocks[index], 10, { contrast: true });
+      const hard = cropCanvas(image, blocks[index], 10, { binarize: true });
       let text = "";
-      for (const crop of [soft, hard]) {
+      let bestScore = -1;
+      for (const crop of [hard, soft]) {
         const result = await worker.recognize(crop);
-        text = `${result.data.text || ""}`;
-        const meetings = window.ComCalSchedule.extractSolusMeetings(text);
-        const codes = window.ComCalSchedule.extractCourseCodes(text);
-        const times = meetings[0]
-          ? { startMinutes: meetings[0].startMinutes, endMinutes: meetings[0].endMinutes }
-          : window.ComCalSchedule.parseTimeRange(text);
-        const title = cleanImportedTitle(meetings[0]?.title || codes[0] || "");
-        if (!title || !times) continue;
-        const weekday = weekdayForSolusX(blocks[index].cx, dayHeaders);
-        if (weekday == null) continue;
+        const candidate = `${result.data.text || ""}`;
+        const score =
+          (candidate.match(/COMM|CISC|MATH|ECON|Lecture|Goodes|\d{1,2}:\d{2}/gi) || []).length;
+        if (score > bestScore) {
+          bestScore = score;
+          text = candidate;
+        }
+        if (score >= 2) break;
+      }
+      const meetings = window.ComCalSchedule.extractSolusMeetings(text);
+      const codes = window.ComCalSchedule.extractCourseCodes(text);
+      const weekday = weekdayForSolusX(blocks[index].cx, dayHeaders);
+      if (weekday == null) continue;
+
+      const geoTimes = (() => {
+        const startMinutes = minutesFromSolusY(blocks[index].y0, solusTop, solusBottom);
+        const endMinutes = minutesFromSolusY(blocks[index].y1, solusTop, solusBottom);
+        if (startMinutes != null && endMinutes != null && endMinutes > startMinutes + 20) {
+          return { startMinutes, endMinutes };
+        }
+        return null;
+      })();
+
+      const pushOne = (title, times, location, activity) => {
+        const clean = cleanImportedTitle(title);
+        if (!clean || !times) return;
         blockTemplates.push({
           weekday,
           startMinutes: times.startMinutes,
           endMinutes: times.endMinutes,
-          title: meetings[0]?.activity ? `${title} ${meetings[0].activity}` : title,
-          location: meetings[0]?.location || window.ComCalSchedule.parseLocation(text),
-          description: meetings[0]?.activity || "",
+          title: activity ? `${clean} ${activity}` : clean,
+          location: location || "",
+          description: activity || "",
           professor: "",
         });
-        break;
+      };
+
+      if (meetings.length) {
+        meetings.forEach((meeting) => {
+          pushOne(
+            meeting.title,
+            {
+              startMinutes: meeting.startMinutes,
+              endMinutes: meeting.endMinutes,
+            },
+            meeting.location,
+            meeting.activity
+          );
+        });
+        continue;
       }
+
+      let times = window.ComCalSchedule.parseTimeRange(text) || geoTimes;
+      pushOne(codes[0] || "", times, window.ComCalSchedule.parseLocation(text), "");
     }
 
     const pageTemplates = templatesFromPageWords(fullWords, dayHeaders);
@@ -396,24 +620,32 @@ function templatesFromPageWords(words, dayHeaders) {
       };
     })
     .filter(Boolean)
-    .filter((word) => word.confidence >= 25);
+    .filter((word) => word.confidence >= 20);
 
   const templates = [];
   const seen = new Set();
 
   for (let i = 0; i < boxes.length; i += 1) {
+    const prev = boxes[i - 1];
     const a = boxes[i];
     const b = boxes[i + 1];
-    const pair = `${a.raw} ${b?.raw || ""}`;
-    const codes = window.ComCalSchedule.extractCourseCodes(pair.toUpperCase());
+    const trio = `${prev?.raw || ""} ${a.raw} ${b?.raw || ""}`;
+    const codes = window.ComCalSchedule.extractCourseCodes(trio.toUpperCase());
     if (!codes.length) continue;
+    // Anchor on the subject token when possible so column x is stable
+    const anchor = /^(COMM|CISC|MATH|ECON|HIST|PHIL|PSYC|BIOL|CHEM|PHYS|DEVS|FILM|MUSC|RELS|POLS|SOCY|GNDS|INTS|ENGL|FREN|SPAN|LLCU|ANAT|PHGY|KNPE|HLTH|NURS|LAW|MBA)$/i.test(
+      a.raw
+    )
+      ? a
+      : prev && codes[0].startsWith(prev.raw.toUpperCase())
+        ? prev
+        : a;
 
-    // Gather nearby words in the same class tile (similar x column, below/near code)
     const neighbors = boxes.filter(
       (word) =>
-        Math.abs(word.x - a.x) < 90 &&
-        word.y >= a.y - 20 &&
-        word.y <= a.y + 140
+        Math.abs(word.x - anchor.x) < 110 &&
+        word.y >= anchor.y - 24 &&
+        word.y <= anchor.y + 160
     );
     const blob = neighbors
       .sort((left, right) => left.y - right.y || left.x - right.x)
@@ -425,7 +657,7 @@ function templatesFromPageWords(words, dayHeaders) {
       : window.ComCalSchedule.parseTimeRange(blob);
     const title = cleanImportedTitle(meetings[0]?.title || codes[0]);
     if (!title || !times) continue;
-    const weekday = weekdayForSolusX(a.x, dayHeaders);
+    const weekday = weekdayForSolusX(anchor.x, dayHeaders);
     if (weekday == null) continue;
     const key = `${weekday}|${times.startMinutes}|${times.endMinutes}|${title.toUpperCase()}`;
     if (seen.has(key)) continue;
@@ -479,8 +711,14 @@ function buildImportedSchedule(parsed) {
         "That looks like sessional dates, which are already on the calendar. Upload one week of your class schedule instead."
       );
     }
+    const snippet = String(parsed.text || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 140);
     throw new Error(
-      "Couldn't find class times in that file. Try a clearer screenshot of one week in SOLUS/onQ, or an .ics export."
+      snippet
+        ? `Couldn't find class times in that screenshot (OCR read: “${snippet}…”). Try PNG/JPG of the full Mon–Sun week, or an .ics export.`
+        : "Couldn't find class times in that file. Try a PNG/JPG screenshot of one full SOLUS week, or an .ics export."
     );
   }
 
@@ -488,7 +726,8 @@ function buildImportedSchedule(parsed) {
     .concat(parsed.events || [])
     .map((event) => event.start)
     .filter(Boolean);
-  const term = window.ComCalAcademic.termForDates(sampleDates);
+  const term =
+    window.ComCalAcademic.termForDates(sampleDates) || window.ComCalAcademic.currentOrNextTerm();
   const events = window.ComCalSchedule.expandTemplatesToTerm(templates, term, oneOffs);
   if (!events.length) {
     throw new Error("Found classes, but none could be placed in the current term.");
