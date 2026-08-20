@@ -474,6 +474,15 @@ function applyImportedEvents(events, templates, term, sourceLabel) {
   );
 }
 
+function closeImportModal() {
+  const modal = document.getElementById("import-modal");
+  if (modal) modal.hidden = true;
+  const fileInput = document.getElementById("import-file");
+  if (fileInput) fileInput.value = "";
+  showSelectedFile(null);
+  setImportStatus("");
+}
+
 function showSelectedFile(file) {
   const name = document.getElementById("import-file-name");
   const preview = document.getElementById("import-preview");
@@ -494,13 +503,18 @@ async function handleImport() {
     setImportStatus("Choose a screenshot or schedule file first.", true);
     return;
   }
+  const submit = document.getElementById("import-submit");
+  if (submit) submit.disabled = true;
   setImportStatus("Importing…");
 
   try {
     const result = await window.ComCalImport.importScheduleFile(file, setImportStatus);
     applyImportedEvents(result.events, result.templates, result.term, file.name);
+    closeImportModal();
   } catch (error) {
     setImportStatus(error.message || "Import failed.", true);
+  } finally {
+    if (submit) submit.disabled = false;
   }
 }
 
@@ -513,10 +527,10 @@ document.getElementById("cal-import-open").addEventListener("click", () => {
   setImportStatus("");
 });
 document.getElementById("import-cancel").addEventListener("click", () => {
-  importModal.hidden = true;
+  closeImportModal();
 });
 importModal.addEventListener("click", (event) => {
-  if (event.target === importModal) importModal.hidden = true;
+  if (event.target === importModal) closeImportModal();
 });
 document.getElementById("import-submit").addEventListener("click", handleImport);
 document.getElementById("import-clear").addEventListener("click", () => {
