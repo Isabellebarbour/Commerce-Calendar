@@ -692,7 +692,8 @@ function upcomingEvents(events, limit = 3) {
 }
 
 function isExamEvent(event) {
-  return /exam|midterm|final/i.test(`${event.title} ${event.description}`);
+  if (event?.source === "exam") return true;
+  return /exam|midterm|final/i.test(`${event.title || ""} ${event.description || ""}`);
 }
 
 window.ComCalSchedule = {

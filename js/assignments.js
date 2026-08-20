@@ -162,7 +162,11 @@ function formatDueDisplay(start, end) {
 
 function letterGrade(percent) {
   if (percent == null || Number.isNaN(percent)) return "—";
-  return QUEENS_LETTERS.find((row) => percent >= row.min)?.letter || "F";
+  // Queen's: round to 1 decimal, then to a whole percent (half up).
+  // e.g. 84.46 → 84.5 → 85 → A; 84.44 → 84.4 → 84 → A-
+  const toOneDecimal = Math.round(Number(percent) * 10) / 10;
+  const rounded = Math.round(toOneDecimal);
+  return QUEENS_LETTERS.find((row) => rounded >= row.min)?.letter || "F";
 }
 
 function courseMark(course) {
@@ -554,7 +558,14 @@ function bindAssignmentsPage() {
         return;
       }
       const addBtn = target.closest(".asgn-add-item");
-      if (addBtn) addAssignmentItem(addBtn.dataset.course);
+      if (addBtn) {
+        addAssignmentItem(addBtn.dataset.course);
+        return;
+      }
+      const deleteBtn = target.closest(".asgn-delete");
+      if (deleteBtn) {
+        deleteAssignmentItem(deleteBtn.dataset.course, deleteBtn.dataset.item);
+      }
     };
   }
 }
@@ -620,6 +631,9 @@ function tableForCourse(course) {
           <span>%</span>
         </td>
         <td class="asgn-grade-cell">${row.score != null && row.score !== "" ? escapeAsgn(letterGrade(Number(row.score))) : ""}</td>
+        <td class="asgn-actions">
+          <button type="button" class="asgn-delete" data-course="${escapeAsgn(course.id)}" data-item="${escapeAsgn(row.id)}" aria-label="Delete ${escapeAsgn(row.title || "assignment")}">×</button>
+        </td>
       </tr>`
     )
     .join("");
@@ -646,12 +660,13 @@ function tableForCourse(course) {
               <th>Weight</th>
               <th>Score</th>
               <th>Grade</th>
+              <th aria-label="Delete"></th>
             </tr>
           </thead>
           <tbody>
             ${
               rows ||
-              `<tr class="asgn-empty-row"><td colspan="6">No assignments yet. Add one below.</td></tr>`
+              `<tr class="asgn-empty-row"><td colspan="7">No assignments yet. Add one below.</td></tr>`
             }
           </tbody>
           <tfoot>
@@ -659,6 +674,7 @@ function tableForCourse(course) {
               <td colspan="4"></td>
               <td class="asgn-total-score">${mark.percent != null ? formatPercent(mark.percent) : "—"}</td>
               <td class="asgn-total-grade">${mark.percent != null ? escapeAsgn(mark.letter) : "—"}</td>
+              <td></td>
             </tr>
           </tfoot>
         </table>
@@ -708,6 +724,17 @@ function addAssignmentItem(courseId) {
   course.items.push(item("New assignment", todayISO(), null, 0, null));
   saveAssignments();
   window.ComCalAssignments?.render();
+}
+
+function deleteAssignmentItem(courseId, itemId) {
+  const course = findCourse(courseId);
+  if (!course || !Array.isArray(course.items)) return;
+  const next = course.items.filter((row) => row.id !== itemId);
+  if (next.length === course.items.length) return;
+  course.items = next;
+  saveAssignments();
+  window.ComCalAssignments?.render();
+  window.ComCalAssignments?.refreshHome();
 }
 
 function eventElement(event) {

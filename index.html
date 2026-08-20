@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lato:wght@400;700;900&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="css/styles.css?v=47" />
+    <link rel="stylesheet" href="css/styles.css?v=50" />
   </head>
   <body class="is-landing">
     <div id="landing" class="landing" aria-label="Welcome">
@@ -440,6 +440,52 @@
       </div>
     </div>
 
+    <div class="import-modal" id="exam-import-modal" hidden>
+      <div class="import-dialog" role="dialog" aria-labelledby="exam-import-title" aria-modal="true">
+        <h2 id="exam-import-title">Exams</h2>
+        <p class="import-copy">
+          Upload your SOLUS exam schedule to place exams on the calendar. ComCal never asks
+          for your NetID or password.
+        </p>
+        <label class="import-drop" id="exam-import-drop" for="exam-import-file">
+          <input id="exam-import-file" class="import-file" type="file" accept="*/*" />
+          <strong>Upload exam schedule</strong>
+          <span>.ics export, PDF, or screenshot</span>
+          <em id="exam-import-file-name"></em>
+        </label>
+        <div class="import-preview" id="exam-import-preview" hidden>
+          <img id="exam-import-preview-img" alt="Selected exam schedule preview" />
+        </div>
+        <div class="event-field exam-import-colour">
+          Colour
+          <div class="topic-color-picker" id="exam-color-picker">
+            <button type="button" class="topic-color-trigger" id="exam-color-trigger" aria-haspopup="true" aria-expanded="false">
+              <span class="topic-color-dot" id="exam-color-dot"></span>
+              <span class="topic-color-caret" aria-hidden="true">▾</span>
+            </button>
+            <div class="topic-color-panel" id="exam-color-panel" hidden>
+              <div class="topic-color-grid" id="exam-color-grid" role="listbox" aria-label="Preset colours"></div>
+              <button type="button" class="topic-color-custom-btn" id="exam-color-custom-btn">
+                Custom…
+              </button>
+              <div class="topic-color-custom" id="exam-color-custom" hidden>
+                <input id="exam-edit-color" type="color" value="#E85D4C" aria-label="Custom colour wheel" />
+                <span>Pick any colour</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="import-status" id="exam-import-status" hidden></p>
+        <div class="import-actions">
+          <button type="button" id="exam-import-clear">Clear exams</button>
+          <button type="button" id="exam-import-cancel">Cancel</button>
+          <button type="button" class="import-primary" id="exam-import-submit">
+            Import
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div class="import-modal" id="import-modal" hidden>
       <div class="import-dialog" role="dialog" aria-labelledby="import-title" aria-modal="true">
         <h2 id="import-title">Import Queen’s Schedule</h2>
@@ -673,11 +719,11 @@
     <script src="js/app.js?v=11"></script>
     <script src="js/academic-calendar.js"></script>
     <script src="js/schedule.js"></script>
-    <script src="js/topics.js?v=5"></script>
-    <script src="js/import.js"></script>
+    <script src="js/topics.js?v=7"></script>
+    <script src="js/import.js?v=2"></script>
     <script src="js/curriculum.js?v=5"></script>
-    <script src="js/assignments.js?v=38"></script>
-    <script src="js/calendar.js?v=4"></script>
+    <script src="js/assignments.js?v=41"></script>
+    <script src="js/calendar.js?v=7"></script>
     <script src="js/grades.js?v=10"></script>
     <script src="js/profile.js"></script>
   </body>

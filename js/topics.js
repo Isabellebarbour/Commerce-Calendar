@@ -4,6 +4,8 @@ const SESSIONAL_ID = "sessional";
 const SESSIONAL_COLOR = "#071e49";
 const ASSIGNMENTS_ID = "assignments";
 const ASSIGNMENTS_COLOR = "#E8A838";
+const EXAMS_ID = "exams";
+const EXAMS_COLOR = "#E85D4C";
 const COURSE_COLORS = [
   "#5B8DEF",
   "#E8A838",
@@ -77,7 +79,7 @@ function ensureAssignmentsTopic(topics) {
     existing.type = "assignments";
     existing.locked = true;
     if (!isValidHexColor(existing.color)) existing.color = ASSIGNMENTS_COLOR;
-    return topics;
+    return ensureExamsTopic(topics);
   }
   const sessionalIndex = topics.findIndex((topic) => topic.id === SESSIONAL_ID);
   const entry = {
@@ -90,6 +92,33 @@ function ensureAssignmentsTopic(topics) {
   };
   if (sessionalIndex >= 0) topics.splice(sessionalIndex + 1, 0, entry);
   else topics.unshift(entry);
+  return ensureExamsTopic(topics);
+}
+
+function ensureExamsTopic(topics) {
+  const existing = topics.find((topic) => topic.id === EXAMS_ID);
+  if (existing) {
+    existing.name = "Exams";
+    existing.type = "exams";
+    existing.locked = true;
+    if (!isValidHexColor(existing.color)) existing.color = EXAMS_COLOR;
+    return topics;
+  }
+  const assignmentsIndex = topics.findIndex((topic) => topic.id === ASSIGNMENTS_ID);
+  const entry = {
+    id: EXAMS_ID,
+    name: "Exams",
+    color: EXAMS_COLOR,
+    type: "exams",
+    locked: true,
+    visible: true,
+  };
+  if (assignmentsIndex >= 0) topics.splice(assignmentsIndex + 1, 0, entry);
+  else {
+    const sessionalIndex = topics.findIndex((topic) => topic.id === SESSIONAL_ID);
+    if (sessionalIndex >= 0) topics.splice(sessionalIndex + 1, 0, entry);
+    else topics.unshift(entry);
+  }
   return topics;
 }
 
@@ -101,7 +130,7 @@ function getTopics() {
   const topics = ensureSessional(loadTopics());
   let changed = false;
   topics.forEach((topic, index) => {
-    if (topic.type === "sessional" || topic.type === "assignments") return;
+    if (topic.type === "sessional" || topic.type === "assignments" || topic.type === "exams") return;
     if (isValidHexColor(topic.color)) return;
     topic.color = COURSE_COLORS[index % COURSE_COLORS.length];
     changed = true;
@@ -137,6 +166,7 @@ function colorForCourse(code) {
 
 function inferredTopicId(event) {
   if (event.source === "assignment") return ASSIGNMENTS_ID;
+  if (event.source === "exam") return EXAMS_ID;
   if (event.topicId && topicById(event.topicId)) return event.topicId;
   if (event.source === "academic") return SESSIONAL_ID;
   const codes = window.ComCalSchedule.extractCourseCodes(`${event.title || ""} ${event.description || ""}`);
@@ -148,7 +178,7 @@ function syncCourseTopics(events) {
   const topics = ensureSessional(loadTopics());
   const codes = new Set();
   events.forEach((event) => {
-    if (event.source === "academic" || event.source === "assignment") return;
+    if (event.source === "academic" || event.source === "assignment" || event.source === "exam") return;
     window.ComCalSchedule.extractCourseCodes(`${event.title || ""} ${event.description || ""}`).forEach((code) => {
       codes.add(code);
     });
@@ -199,7 +229,7 @@ function addTopic(name, color) {
 }
 
 function removeTopic(id) {
-  if (id === SESSIONAL_ID || id === ASSIGNMENTS_ID) return;
+  if (id === SESSIONAL_ID || id === ASSIGNMENTS_ID || id === EXAMS_ID) return;
   const topics = getTopics().filter((topic) => topic.id !== id);
   saveTopics(topics);
   const edits = loadEdits();
@@ -217,7 +247,7 @@ function setTopicVisible(id, visible) {
 }
 
 function setTopicColor(id, color) {
-  if (id === SESSIONAL_ID || id === ASSIGNMENTS_ID) return;
+  if (id === SESSIONAL_ID) return;
   const next = String(color || "").trim().toUpperCase();
   if (!isValidHexColor(next)) return;
   const topics = ensureSessional(loadTopics());
@@ -226,7 +256,7 @@ function setTopicColor(id, color) {
 }
 
 function renameTopic(id, name) {
-  if (id === SESSIONAL_ID || id === ASSIGNMENTS_ID) return;
+  if (id === SESSIONAL_ID || id === ASSIGNMENTS_ID || id === EXAMS_ID) return;
   const trimmed = String(name || "").trim();
   if (!trimmed) return;
   const topics = getTopics().map((topic) => (topic.id === id ? { ...topic, name: trimmed } : topic));
@@ -327,6 +357,8 @@ window.ComCalTopics = {
   SESSIONAL_COLOR,
   ASSIGNMENTS_ID,
   ASSIGNMENTS_COLOR,
+  EXAMS_ID,
+  EXAMS_COLOR,
   getTopics,
   topicById,
   colorForCourse,

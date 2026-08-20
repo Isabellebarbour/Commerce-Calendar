@@ -368,6 +368,72 @@ async function importScheduleFile(file, onProgress) {
   return buildImportedSchedule(parsed);
 }
 
+function toExamEvent(event, index = 0) {
+  const topicId = window.ComCalTopics?.EXAMS_ID || "exams";
+  const baseId = String(event.id || event.uid || `exam-${index}`);
+  return {
+    ...event,
+    id: baseId.startsWith("exam-") ? baseId : `exam-${baseId}`,
+    uid: event.uid ? (String(event.uid).startsWith("exam-") ? event.uid : `exam-${event.uid}`) : `exam-${baseId}`,
+    source: "exam",
+    topicId,
+  };
+}
+
+async function parseExamCandidates(file, onProgress) {
+  if (isIcsFile(file) || file.type === "text/plain" || /\.(txt|csv)$/i.test(file.name)) {
+    const text = await file.text();
+    if (/BEGIN:VCALENDAR/i.test(text)) {
+      return window.ComCalSchedule.parseIcs(text);
+    }
+    const parsed = window.ComCalSchedule.parseScheduleText(text);
+    return [...(parsed.oneOffs || []), ...(parsed.events || [])].filter(Boolean);
+  }
+
+  if (isPdfFile(file)) {
+    const text = await readPdfText(file, onProgress);
+    const parsed = window.ComCalSchedule.parseScheduleText(text);
+    const candidates = [...(parsed.oneOffs || []), ...(parsed.events || [])].filter(Boolean);
+    if (candidates.length) return candidates;
+    // Fall back: treat any exam-like meetings found in text as empty — caller errors
+    return [];
+  }
+
+  if (isImageFile(file) || !file.type) {
+    onProgress?.("Scanning exam schedule…");
+    const data = await recognizeImage(file, onProgress);
+    const fromText = window.ComCalSchedule.parseScheduleText(data.text || "");
+    return [...(fromText.oneOffs || []), ...(fromText.events || [])].filter(Boolean);
+  }
+
+  const text = await file.text();
+  if (/BEGIN:VCALENDAR/i.test(text)) {
+    return window.ComCalSchedule.parseIcs(text);
+  }
+  const parsed = window.ComCalSchedule.parseScheduleText(text);
+  return [...(parsed.oneOffs || []), ...(parsed.events || [])].filter(Boolean);
+}
+
+async function importExamFile(file, onProgress) {
+  onProgress?.("Importing exam schedule…");
+  let events = await parseExamCandidates(file, onProgress);
+
+  // Prefer explicit exam/midterm/final rows when mixed content is present
+  const examLike = events.filter((event) =>
+    /exam|midterm|final|test|deferral/i.test(`${event.title || ""} ${event.description || ""}`)
+  );
+  if (examLike.length) events = examLike;
+
+  if (!events.length) {
+    throw new Error(
+      "Couldn't find exam times in that file. Try a SOLUS exam schedule .ics export, or a clearer PDF/screenshot of your exam timetable."
+    );
+  }
+
+  return events.map((event, index) => toExamEvent(event, index));
+}
+
 window.ComCalImport = {
   importScheduleFile,
+  importExamFile,
 };

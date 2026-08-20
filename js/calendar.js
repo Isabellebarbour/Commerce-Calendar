@@ -399,11 +399,23 @@ function refreshHomeCards() {
   const examBody = document.getElementById("home-exam-body");
   if (!calBodyCard || !examBody) return;
 
-  const upcoming = window.ComCalSchedule.upcomingEvents(visibleCalendarEvents(), 3);
-  const exams = window.ComCalSchedule
-    .upcomingEvents(visibleCalendarEvents(), 20)
-    .filter((event) => window.ComCalSchedule.isExamEvent(event))
-    .slice(0, 3);
+  // Dashboard My Calendar: class schedule + Commerce sessional dates only.
+  // Assignments and imported exams have their own home cards.
+  const calendarOnly = visibleCalendarEvents().filter(
+    (event) =>
+      event.source !== "assignment" &&
+      event.source !== "exam" &&
+      !String(event.id || "").startsWith("asgn-") &&
+      !String(event.id || "").startsWith("exam-")
+  );
+  const upcoming = window.ComCalSchedule.upcomingEvents(calendarOnly, 3);
+  const examEvents = visibleCalendarEvents().filter(
+    (event) =>
+      event.source !== "assignment" &&
+      !String(event.id || "").startsWith("asgn-") &&
+      window.ComCalSchedule.isExamEvent(event)
+  );
+  const exams = window.ComCalSchedule.upcomingEvents(examEvents, 3);
 
   const listHtml = (items, emptyTitle, emptyCopy) => {
     if (!items.length) {
@@ -423,11 +435,7 @@ function refreshHomeCards() {
           });
           return `<li>
             <strong>${escapeCal(event.title)}</strong>
-            <span>${escapeCal(when)}${
-              event.source === "assignment" && (event.location || event.courseCode)
-                ? ` · ${escapeCal(event.location || event.courseCode)}`
-                : ""
-            }</span>
+            <span>${escapeCal(when)}</span>
           </li>`;
         })
         .join("")}
@@ -451,10 +459,10 @@ function reloadEvents() {
 }
 
 function applyImportedEvents(events, templates, term, sourceLabel) {
-  const assignmentEvents = (window.ComCalSchedule.load() || []).filter(
-    (event) => event.source === "assignment"
+  const kept = (window.ComCalSchedule.load() || []).filter(
+    (event) => event.source === "assignment" || event.source === "exam"
   );
-  window.ComCalSchedule.save([...events, ...assignmentEvents]);
+  window.ComCalSchedule.save([...events, ...kept]);
   window.ComCalTopics.syncCourseTopics(events);
   window.ComCalAssignments?.syncFromSchedule(events);
   const result = window.ComCalCurriculum?.markFromSchedule(events) || { planned: 0 };
@@ -512,10 +520,10 @@ importModal.addEventListener("click", (event) => {
 });
 document.getElementById("import-submit").addEventListener("click", handleImport);
 document.getElementById("import-clear").addEventListener("click", () => {
-  const assignmentEvents = (window.ComCalSchedule.load() || []).filter(
-    (event) => event.source === "assignment"
+  const kept = (window.ComCalSchedule.load() || []).filter(
+    (event) => event.source === "assignment" || event.source === "exam"
   );
-  window.ComCalSchedule.save(assignmentEvents);
+  window.ComCalSchedule.save(kept);
   window.ComCalTopics.removeCourseTopics();
   reloadEvents();
   setImportStatus("Imported schedule cleared.");
@@ -542,6 +550,198 @@ importDrop.addEventListener("drop", (event) => {
   transfer.items.add(file);
   importFile.files = transfer.files;
   showSelectedFile(file);
+});
+
+let examImportFile = null;
+let examEditorSelectedColor = window.ComCalTopics?.EXAMS_COLOR || "#E85D4C";
+
+function setExamImportStatus(message, isError = false) {
+  const status = document.getElementById("exam-import-status");
+  if (!status) return;
+  status.hidden = !message;
+  status.textContent = message || "";
+  status.classList.toggle("is-error", !!isError);
+}
+
+function setExamColorPanelOpen(open) {
+  const panel = document.getElementById("exam-color-panel");
+  const trigger = document.getElementById("exam-color-trigger");
+  if (!panel || !trigger) return;
+  panel.hidden = !open;
+  trigger.setAttribute("aria-expanded", open ? "true" : "false");
+}
+
+function setExamEditorColor(color, { customOpen = false } = {}) {
+  examEditorSelectedColor = normalizeHexColor(color) || examEditorSelectedColor;
+  const input = document.getElementById("exam-edit-color");
+  const dot = document.getElementById("exam-color-dot");
+  const grid = document.getElementById("exam-color-grid");
+  const custom = document.getElementById("exam-color-custom");
+  if (input) input.value = examEditorSelectedColor;
+  if (dot) dot.style.background = examEditorSelectedColor;
+  grid?.querySelectorAll("[data-exam-color]").forEach((button) => {
+    button.classList.toggle("is-selected", button.dataset.examColor.toLowerCase() === examEditorSelectedColor.toLowerCase());
+  });
+  if (custom) custom.hidden = !customOpen;
+}
+
+function fillExamColorGrid(selected) {
+  const grid = document.getElementById("exam-color-grid");
+  if (!grid) return;
+  const presets = [
+    "#E85D4C",
+    "#E8A838",
+    "#5B8DEF",
+    "#6BCB77",
+    "#A78BFA",
+    "#F472B6",
+    "#FB923C",
+    "#38BDF8",
+    "#F87171",
+    "#071e49",
+  ];
+  grid.innerHTML = presets
+    .map(
+      (color) =>
+        `<button type="button" class="topic-color-swatch${
+          color.toLowerCase() === String(selected || "").toLowerCase() ? " is-selected" : ""
+        }" data-exam-color="${color}" style="--topic:${color}" aria-label="${color}"></button>`
+    )
+    .join("");
+}
+
+function showExamSelectedFile(file) {
+  examImportFile = file || null;
+  const name = document.getElementById("exam-import-file-name");
+  const preview = document.getElementById("exam-import-preview");
+  const image = document.getElementById("exam-import-preview-img");
+  if (name) name.textContent = file ? file.name : "";
+  if (file && String(file.type || "").startsWith("image/") && preview && image) {
+    image.src = URL.createObjectURL(file);
+    preview.hidden = false;
+  } else {
+    image?.removeAttribute("src");
+    if (preview) preview.hidden = true;
+  }
+}
+
+function openExamImportModal() {
+  const modal = document.getElementById("exam-import-modal");
+  if (!modal) return;
+  const topic = window.ComCalTopics.topicById(window.ComCalTopics.EXAMS_ID);
+  const color = topic?.color || window.ComCalTopics.EXAMS_COLOR || "#E85D4C";
+  fillExamColorGrid(color);
+  setExamEditorColor(color, { customOpen: false });
+  setExamColorPanelOpen(false);
+  setExamImportStatus("");
+  showExamSelectedFile(null);
+  const fileInput = document.getElementById("exam-import-file");
+  if (fileInput) fileInput.value = "";
+  modal.hidden = false;
+}
+
+function closeExamImportModal() {
+  const modal = document.getElementById("exam-import-modal");
+  if (!modal) return;
+  modal.hidden = true;
+  setExamColorPanelOpen(false);
+  examImportFile = null;
+  setExamImportStatus("");
+}
+
+async function handleExamImport() {
+  window.ComCalTopics.setTopicColor(window.ComCalTopics.EXAMS_ID, examEditorSelectedColor);
+  renderTopics();
+  renderCalendar();
+
+  const file = examImportFile || document.getElementById("exam-import-file")?.files?.[0];
+  if (!file) {
+    closeExamImportModal();
+    return;
+  }
+  const submit = document.getElementById("exam-import-submit");
+  if (submit) submit.disabled = true;
+  setExamImportStatus("Importing…");
+  try {
+    const events = await window.ComCalImport.importExamFile(file, setExamImportStatus);
+    const kept = (window.ComCalSchedule.load() || []).filter((event) => event.source !== "exam");
+    window.ComCalSchedule.save([...kept, ...events]);
+    reloadEvents();
+    setExamImportStatus(`Added ${events.length} exam${events.length === 1 ? "" : "s"} to your calendar.`);
+    setTimeout(() => closeExamImportModal(), 600);
+  } catch (error) {
+    setExamImportStatus(error.message || "Import failed.", true);
+  } finally {
+    if (submit) submit.disabled = false;
+  }
+}
+
+const examImportModal = document.getElementById("exam-import-modal");
+const examImportDrop = document.getElementById("exam-import-drop");
+const examImportFileInput = document.getElementById("exam-import-file");
+
+document.getElementById("exam-import-cancel")?.addEventListener("click", closeExamImportModal);
+examImportModal?.addEventListener("click", (event) => {
+  if (event.target === examImportModal) closeExamImportModal();
+});
+document.getElementById("exam-import-submit")?.addEventListener("click", handleExamImport);
+document.getElementById("exam-import-clear")?.addEventListener("click", () => {
+  const kept = (window.ComCalSchedule.load() || []).filter((event) => event.source !== "exam");
+  window.ComCalSchedule.save(kept);
+  reloadEvents();
+  setExamImportStatus("Exam schedule cleared.");
+});
+examImportFileInput?.addEventListener("change", () => {
+  showExamSelectedFile(examImportFileInput.files?.[0] || null);
+});
+["dragenter", "dragover"].forEach((type) => {
+  examImportDrop?.addEventListener(type, (event) => {
+    event.preventDefault();
+    examImportDrop.classList.add("is-dragover");
+  });
+});
+["dragleave", "drop"].forEach((type) => {
+  examImportDrop?.addEventListener(type, (event) => {
+    event.preventDefault();
+    examImportDrop.classList.remove("is-dragover");
+  });
+});
+examImportDrop?.addEventListener("drop", (event) => {
+  const file = event.dataTransfer.files[0];
+  if (!file) return;
+  const transfer = new DataTransfer();
+  transfer.items.add(file);
+  if (examImportFileInput) examImportFileInput.files = transfer.files;
+  showExamSelectedFile(file);
+});
+
+document.getElementById("exam-color-trigger")?.addEventListener("click", (event) => {
+  event.preventDefault();
+  const panel = document.getElementById("exam-color-panel");
+  setExamColorPanelOpen(panel.hidden);
+});
+document.getElementById("exam-color-grid")?.addEventListener("click", (event) => {
+  const swatch = event.target.closest("[data-exam-color]");
+  if (!swatch) return;
+  setExamEditorColor(swatch.dataset.examColor, { customOpen: false });
+  window.ComCalTopics.setTopicColor(window.ComCalTopics.EXAMS_ID, examEditorSelectedColor);
+  renderTopics();
+  renderCalendar();
+});
+document.getElementById("exam-color-custom-btn")?.addEventListener("click", () => {
+  const custom = document.getElementById("exam-color-custom");
+  if (custom) custom.hidden = false;
+  const input = document.getElementById("exam-edit-color");
+  input?.focus();
+  input?.click();
+});
+document.getElementById("exam-edit-color")?.addEventListener("input", (event) => {
+  setExamEditorColor(event.target.value, { customOpen: true });
+});
+document.getElementById("exam-edit-color")?.addEventListener("change", () => {
+  window.ComCalTopics.setTopicColor(window.ComCalTopics.EXAMS_ID, examEditorSelectedColor);
+  renderTopics();
+  renderCalendar();
 });
 
 function pad(value) {
@@ -616,7 +816,7 @@ function miniMonthHtml() {
 }
 
 function topicItemHtml(topic) {
-  const canEdit = topic.type !== "sessional" && topic.type !== "assignments";
+  const canEdit = topic.type !== "sessional";
   return `<li class="cal-topic${topic.visible === false ? " is-off" : ""}">
     <button type="button" class="cal-topic-swatch-btn" data-topic-toggle="${escapeCal(topic.id)}" aria-pressed="${topic.visible !== false}" aria-label="Toggle ${escapeCal(topic.name)}" style="--topic:${topic.color}">
       <span class="cal-topic-swatch"></span>
@@ -638,6 +838,7 @@ function renderTopics() {
   const topics = window.ComCalTopics.getTopics();
   const sessional = topics.filter((topic) => topic.type === "sessional");
   const assignments = topics.filter((topic) => topic.type === "assignments");
+  const exams = topics.filter((topic) => topic.type === "exams");
   const courses = topics.filter((topic) => topic.type === "course");
   const custom = topics.filter((topic) => topic.type === "custom" || topic.type === "other");
 
@@ -647,7 +848,7 @@ function renderTopics() {
       <section class="cal-topic-group">
         <p class="cal-topics-label">Isabelle Barbour</p>
         <ul class="cal-topic-list">
-          ${[...sessional, ...assignments, ...courses, ...custom].map(topicItemHtml).join("")}
+          ${[...sessional, ...assignments, ...exams, ...courses, ...custom].map(topicItemHtml).join("")}
         </ul>
         <button type="button" class="cal-topic-add" id="cal-topic-add">
           <span class="cal-topic-add-plus" aria-hidden="true">+</span>
@@ -718,6 +919,11 @@ topicsRoot.addEventListener("click", (event) => {
   }
   const edit = event.target.closest("[data-topic-edit]");
   if (edit && !edit.disabled) {
+    const topic = window.ComCalTopics.topicById(edit.dataset.topicEdit);
+    if (topic?.type === "exams") {
+      openExamImportModal();
+      return;
+    }
     openTopicEditor(edit.dataset.topicEdit);
     return;
   }
@@ -976,26 +1182,43 @@ function openTopicEditor(topicId) {
   topicEditorMode = isCreate ? "create" : "edit";
   editingTopicId = topicId || null;
   const topic = isCreate ? null : window.ComCalTopics.topicById(topicId);
-  if (!isCreate && (!topic || topic.type === "sessional" || topic.type === "assignments")) return;
+  if (!isCreate && (!topic || topic.type === "sessional")) return;
 
+  const nameLocked = !isCreate && topic.type === "assignments";
+  if (!isCreate && topic.type === "exams") {
+    openExamImportModal();
+    return;
+  }
   const color = isCreate ? nextUnusedTopicColor() : topic.color;
   document.getElementById("topic-edit-heading").textContent = isCreate
     ? "Add calendar"
     : `Edit ${topic.name}`;
-  document.getElementById("topic-edit-name").value = isCreate ? "" : topic.name;
+  const nameInput = document.getElementById("topic-edit-name");
+  nameInput.value = isCreate ? "" : topic.name;
+  nameInput.readOnly = nameLocked;
+  nameInput.disabled = nameLocked;
   document.getElementById("topic-edit-error").hidden = true;
   document.getElementById("topic-edit-delete").hidden = isCreate || topic.type !== "custom";
   fillTopicColorGrid(color);
   setTopicEditorColor(color, { customOpen: false });
   setTopicColorPanelOpen(false);
   topicEditModal.hidden = false;
-  document.getElementById("topic-edit-name").focus();
-  if (!isCreate) document.getElementById("topic-edit-name").select();
+  if (nameLocked) {
+    document.getElementById("topic-color-trigger")?.focus();
+  } else {
+    nameInput.focus();
+    if (!isCreate) nameInput.select();
+  }
 }
 
 function closeTopicEditor() {
   editingTopicId = null;
   topicEditorMode = "edit";
+  const nameInput = document.getElementById("topic-edit-name");
+  if (nameInput) {
+    nameInput.readOnly = false;
+    nameInput.disabled = false;
+  }
   setTopicColorPanelOpen(false);
   topicEditModal.hidden = true;
 }
@@ -1033,7 +1256,9 @@ document.getElementById("topic-edit-save")?.addEventListener("click", () => {
   const name = document.getElementById("topic-edit-name").value.trim();
   const color = normalizeHexColor(topicEditorSelectedColor);
   const error = document.getElementById("topic-edit-error");
-  if (!name) {
+  const editing = editingTopicId ? window.ComCalTopics.topicById(editingTopicId) : null;
+  const nameLocked = editing?.type === "assignments";
+  if (!nameLocked && !name) {
     error.hidden = false;
     error.textContent = "Enter a calendar name.";
     return;
@@ -1048,7 +1273,7 @@ document.getElementById("topic-edit-save")?.addEventListener("click", () => {
     }
   } else {
     if (!editingTopicId) return;
-    window.ComCalTopics.renameTopic(editingTopicId, name);
+    if (!nameLocked) window.ComCalTopics.renameTopic(editingTopicId, name);
     window.ComCalTopics.setTopicColor(editingTopicId, color);
   }
   closeTopicEditor();
