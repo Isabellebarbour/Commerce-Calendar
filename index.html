@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Smith Commerce Calendar</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lato:wght@400;700;900&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/styles.css?v=47" />
+  </head>
+  <body class="is-landing">
+    <div id="landing" class="landing" aria-label="Welcome">
+      <header class="landing-top">
+        <img
+          class="landing-logo"
+          src="assets/logo.png"
+          alt="Smith Commerce Calendar, Queen's University"
+        />
+        <nav class="landing-auth-nav" aria-label="Account">
+          <button type="button" class="landing-auth-link" id="landing-login-open">
+            Login
+          </button>
+          <button type="button" class="landing-auth-link" id="landing-signup-open">
+            Sign Up
+          </button>
+        </nav>
+      </header>
+
+      <section class="landing-hero" aria-label="Campus hero">
+        <img
+          class="landing-hero-img"
+          src="assets/home-bg.png"
+          alt="Queen's University Theological Hall in winter"
+        />
+        <div class="landing-hero-overlay">
+          <h1 class="landing-hero-title">Plan. Track. Succeed.</h1>
+        </div>
+      </section>
+
+      <section class="landing-about">
+        <h2 class="landing-about-title">Smith Commerce Calendar</h2>
+        <p class="landing-about-copy">
+          ComCal is a Queen’s Commerce-specific organization tool designed to help
+          students stay on track throughout the school year. Track academic
+          progress, assignments, deadlines, and key Commerce dates, all in one
+          place.
+        </p>
+        <p class="landing-about-copy landing-about-credit">
+          Created by Commerce students, for Commerce students.
+        </p>
+      </section>
+
+      <footer class="landing-disclaimer">
+        <p>
+          ComCal is independently developed by Commerce students and is not
+          affiliated with, endorsed by, or operated by the Smith School of
+          Business.
+        </p>
+        <p>
+          We are committed to protecting your privacy and do not collect or track
+          personal data.
+        </p>
+      </footer>
+    </div>
+
+    <div id="app-shell" class="app-shell" hidden>
+    <header class="top-bar">
+      <img
+        class="logo"
+        src="assets/logo.png"
+        alt="Smith Commerce Calendar, Queen's University"
+      />
+      <button type="button" class="app-logout" id="app-logout" title="Log out">
+        Log out
+      </button>
+    </header>
+
+    <div class="shell">
+      <aside class="sidebar">
+        <nav class="nav" aria-label="Main">
+          <button class="nav-item is-active" data-page="home" type="button">
+            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M4.5 10.5 12 4l7.5 6.5V20a1 1 0 0 1-1 1h-5v-6h-3v6h-5a1 1 0 0 1-1-1z"
+              />
+            </svg>
+            <span>Home</span>
+          </button>
+
+          <button class="nav-item" data-page="profile" type="button">
+            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="8" r="3.25" />
+              <path d="M6.2 18.5c.9-2.7 3-4 5.8-4s4.9 1.3 5.8 4" />
+            </svg>
+            <span>Profile</span>
+          </button>
+
+          <button class="nav-item" data-page="calendar" type="button">
+            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="4.5" y="5.5" width="15" height="14" rx="1.5" />
+              <path d="M4.5 9.5h15M8 4.5v2.5M16 4.5v2.5" />
+              <circle cx="8.5" cy="13" r="0.7" fill="currentColor" stroke="none" />
+              <circle cx="12" cy="13" r="0.7" fill="currentColor" stroke="none" />
+              <circle cx="15.5" cy="13" r="0.7" fill="currentColor" stroke="none" />
+              <circle cx="8.5" cy="16.2" r="0.7" fill="currentColor" stroke="none" />
+            </svg>
+            <span>Calendar</span>
+          </button>
+
+          <button class="nav-item" data-page="curriculum" type="button">
+            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 6.5c-2-1.4-4.7-2-7.5-2v12c2.8 0 5.5.6 7.5 2" />
+              <path d="M12 6.5c2-1.4 4.7-2 7.5-2v12c-2.8 0-5.5.6-7.5 2" />
+              <path d="M12 6.5v12" />
+            </svg>
+            <span>Curriculum</span>
+          </button>
+
+          <button class="nav-item" data-page="assignments" type="button">
+            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="6" y="5" width="12" height="15" rx="1.5" />
+              <rect x="9" y="3.5" width="6" height="3" rx="1" />
+              <path d="M9 11h6M9 14.5h4" />
+            </svg>
+            <span>Assignments</span>
+          </button>
+
+          <button class="nav-item" data-page="grades" type="button">
+            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="5" y="5" width="14" height="14" rx="1.5" />
+              <path d="M8.5 15.5v-3M12 15.5v-5.5M15.5 15.5v-7.5" />
+            </svg>
+            <span>Grades</span>
+          </button>
+        </nav>
+
+        <button class="profile" data-page="profile" type="button">
+          <span class="avatar" id="sidebar-avatar" aria-hidden="true">
+            <img id="sidebar-avatar-img" alt="" hidden />
+            <svg id="sidebar-avatar-placeholder" viewBox="0 0 40 40">
+              <circle cx="20" cy="20" r="20" fill="#f0f0f0" />
+              <circle cx="20" cy="15" r="6" fill="#c8c8c8" />
+              <path d="M8 34c2-6 6.5-9 12-9s10 3 12 9" fill="#c8c8c8" />
+            </svg>
+          </span>
+          <span class="profile-name">Isabelle Barbour</span>
+        </button>
+      </aside>
+
+      <main class="main">
+        <section class="page is-active" id="page-home" aria-label="Home">
+          <div class="home-cards">
+            <article class="home-card">
+              <h2 class="home-card-title">My Calendar</h2>
+              <div class="home-card-body" id="home-cal-body">
+                <p class="home-card-empty-title">No events found</p>
+                <p class="home-card-empty-copy">
+                  You have no upcoming calendar events
+                </p>
+              </div>
+              <button class="home-card-link" type="button" data-page="calendar">
+                All calendar events
+              </button>
+            </article>
+
+            <article class="home-card">
+              <h2 class="home-card-title">Assignments</h2>
+              <div class="home-card-body" id="home-asgn-body">
+                <p class="home-card-empty-title">No assignments found</p>
+                <p class="home-card-empty-copy">
+                  You have no upcoming assignments
+                </p>
+              </div>
+              <button class="home-card-link" type="button" data-page="assignments">
+                All assignments
+              </button>
+            </article>
+
+            <article class="home-card">
+              <h2 class="home-card-title">Exams</h2>
+              <div class="home-card-body" id="home-exam-body">
+                <p class="home-card-empty-title">No exams found</p>
+                <p class="home-card-empty-copy">You have no upcoming exams</p>
+              </div>
+              <button class="home-card-link" type="button" data-page="calendar">
+                All exams
+              </button>
+            </article>
+          </div>
+        </section>
+        <section class="page" id="page-profile" aria-label="Profile">
+          <div class="profile-page">
+            <div class="profile-hero">
+              <div class="profile-banner" id="profile-banner">
+                <button type="button" class="profile-banner-edit" id="profile-banner-edit" aria-label="Change background photo">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4.5 8.5h2.2l1.1-2h8.4l1.1 2H19.5A1.5 1.5 0 0 1 21 10v8.5A1.5 1.5 0 0 1 19.5 20h-15A1.5 1.5 0 0 1 3 18.5V10A1.5 1.5 0 0 1 4.5 8.5z" />
+                    <circle cx="12" cy="14" r="3.2" />
+                  </svg>
+                </button>
+                <input id="profile-banner-file" type="file" accept="image/*" hidden />
+              </div>
+              <div class="profile-identity">
+                <button type="button" class="profile-photo" id="profile-photo" aria-label="Add profile picture">
+                  <span class="profile-photo-avatar">
+                    <img id="profile-photo-img" alt="" hidden />
+                    <svg id="profile-photo-placeholder" viewBox="0 0 96 96" aria-hidden="true">
+                      <circle cx="48" cy="48" r="48" fill="#f0f0f0" />
+                      <circle cx="48" cy="36" r="15" fill="#c8c8c8" />
+                      <path d="M20 80c5-17 18-27 28-27s23 10 28 27" fill="#c8c8c8" />
+                    </svg>
+                  </span>
+                  <span class="profile-photo-edit" id="profile-photo-edit" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                      <path d="M4 20h4l10.5-10.5a1.8 1.8 0 0 0 0-2.5L16 4.5a1.8 1.8 0 0 0-2.5 0L3 15v5z" />
+                      <path d="M14.5 6.5l3 3" />
+                    </svg>
+                  </span>
+                </button>
+                <input id="profile-photo-file" type="file" accept="image/*" hidden />
+                <div class="profile-meta">
+                  <div class="profile-name-row">
+                    <h1 class="profile-display-name" id="profile-name">Isabelle Barbour</h1>
+                  </div>
+                  <p class="profile-detail">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5 12 5l8 4.5v2.2l-8-4.5-8 4.5z" /><path d="M6 12.2v5.3l6 3.4 6-3.4v-5.3" /><path d="M12 8.8v12.1" /></svg>
+                    <span id="profile-program">BCOM – Spring 2028, BCom</span>
+                  </p>
+                  <p class="profile-detail">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="6" width="16" height="12" rx="2" /><path d="m5 7 7 6 7-6" /></svg>
+                    <span id="profile-email">23pjr@queensu.ca</span>
+                    <button type="button" class="profile-copy" id="profile-copy-email" aria-label="Copy email">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2" /><path d="M6 16V5.8A1.8 1.8 0 0 1 7.8 4H16" /></svg>
+                    </button>
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <section class="profile-progress" aria-label="Degree progress">
+              <h2 class="profile-progress-title" id="profile-progress-title">You’re 0% complete with your BCom Degree</h2>
+              <div class="profile-progress-track" aria-hidden="true">
+                <div class="profile-progress-fill" id="profile-progress-fill"></div>
+              </div>
+              <div class="profile-years" id="profile-years"></div>
+            </section>
+          </div>
+        </section>
+        <section class="page" id="page-calendar" aria-label="Calendar">
+          <div class="calendar">
+            <div class="cal-toolbar">
+              <div class="cal-toolbar-left">
+                <button
+                  type="button"
+                  class="cal-topics-toggle"
+                  id="cal-topics-toggle"
+                  aria-controls="cal-topics"
+                  aria-expanded="true"
+                  aria-label="Hide calendars sidebar"
+                  title="Hide calendars sidebar"
+                >
+                  <svg viewBox="0 0 20 20" aria-hidden="true">
+                    <rect x="2.5" y="3.5" width="15" height="13" rx="2" />
+                    <path d="M7.5 3.5v13" />
+                  </svg>
+                </button>
+                <h1 class="cal-title" id="cal-title">August 2026</h1>
+              </div>
+              <div class="cal-toolbar-right">
+                <div class="cal-nav">
+                  <button type="button" id="cal-prev" aria-label="Previous">
+                    <svg viewBox="0 0 16 16" aria-hidden="true">
+                      <path d="M10.2 2.6 5.8 8l4.4 5.4" />
+                    </svg>
+                  </button>
+                  <button type="button" id="cal-today">Today</button>
+                  <button type="button" id="cal-next" aria-label="Next">
+                    <svg viewBox="0 0 16 16" aria-hidden="true">
+                      <path d="M5.8 2.6 10.2 8l-4.4 5.4" />
+                    </svg>
+                  </button>
+                </div>
+                <div class="cal-views" role="tablist" aria-label="Calendar view">
+                  <button type="button" data-cal-view="month">
+                    Month
+                  </button>
+                  <button type="button" data-cal-view="week" class="is-active">Week</button>
+                  <button type="button" data-cal-view="day">Day</button>
+                </div>
+                <button type="button" class="cal-import-btn" id="cal-import-open">
+                  Import
+                </button>
+              </div>
+            </div>
+            <div class="cal-main">
+              <aside class="cal-topics" id="cal-topics" aria-label="Calendar topics"></aside>
+              <div class="cal-body" id="cal-body"></div>
+            </div>
+          </div>
+        </section>
+        <section class="page" id="page-curriculum" aria-label="Curriculum">
+          <div class="curriculum">
+            <div class="curr-toolbar">
+              <div>
+                <h1 class="curr-title">Curriculum</h1>
+                <p class="curr-subtitle" id="curr-summary"></p>
+              </div>
+              <div class="curr-years" role="tablist" aria-label="Program year">
+                <button type="button" data-curr-year="1" class="is-active">Year 1</button>
+                <button type="button" data-curr-year="2">Year 2</button>
+                <button type="button" data-curr-year="3">Year 3</button>
+                <button type="button" data-curr-year="4">Year 4</button>
+              </div>
+            </div>
+            <div class="curr-body" id="curr-body"></div>
+          </div>
+        </section>
+        <section class="page" id="page-assignments" aria-label="Assignments">
+          <div class="assignments">
+            <div class="asgn-toolbar">
+              <div>
+                <h1 class="asgn-title">Assignments</h1>
+              </div>
+              <div class="asgn-years" id="asgn-years" role="tablist" aria-label="Program year">
+                <button type="button" data-year-filter="1" class="is-active">Year 1</button>
+                <button type="button" data-year-filter="2">Year 2</button>
+                <button type="button" data-year-filter="3">Year 3</button>
+                <button type="button" data-year-filter="4">Year 4</button>
+              </div>
+            </div>
+            <div class="asgn-filters">
+              <div class="asgn-courses" id="asgn-courses" role="tablist" aria-label="Course"></div>
+            </div>
+            <div class="asgn-body" id="asgn-body"></div>
+          </div>
+        </section>
+        <section class="page" id="page-grades" aria-label="Grades">
+          <div class="grades">
+            <div class="grades-toolbar">
+              <div>
+                <h1 class="grades-title">Grades</h1>
+                <p class="grades-subtitle" id="grades-subtitle">
+                  Import your Queen’s transcript to track course grades and GPA.
+                </p>
+              </div>
+              <div class="grades-toolbar-right">
+                <div class="grades-years" role="tablist" aria-label="Program year">
+                  <button type="button" data-grades-year="all" class="is-active">All Years</button>
+                  <button type="button" data-grades-year="1">Year 1</button>
+                  <button type="button" data-grades-year="2">Year 2</button>
+                  <button type="button" data-grades-year="3">Year 3</button>
+                  <button type="button" data-grades-year="4">Year 4</button>
+                </div>
+                <button type="button" class="grades-edit-btn" id="grades-edit-open">
+                  Edit Grades
+                </button>
+                <button type="button" class="grades-import-btn" id="grades-import-open">
+                  Import Transcript
+                </button>
+              </div>
+            </div>
+            <div class="grades-summary" id="grades-summary"></div>
+            <div class="grades-body" id="grades-body"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+    </div>
+
+    <div class="auth-modal" id="auth-modal" hidden>
+      <div class="auth-backdrop" aria-hidden="true"></div>
+      <div class="auth-dialog" role="dialog" aria-labelledby="auth-title" aria-modal="true">
+        <button type="button" class="auth-back" id="auth-cancel" aria-label="Back">
+          ← Back
+        </button>
+        <h2 id="auth-title">Login</h2>
+        <p class="auth-copy" id="auth-copy" hidden></p>
+        <form id="auth-form" class="auth-form" novalidate>
+          <label class="auth-field auth-signup-only" id="auth-first-name-field" hidden>
+            <span>First Name</span>
+            <input
+              id="auth-first-name"
+              name="firstName"
+              type="text"
+              autocomplete="given-name"
+            />
+          </label>
+          <label class="auth-field auth-signup-only" id="auth-last-name-field" hidden>
+            <span>Last Name</span>
+            <input
+              id="auth-last-name"
+              name="lastName"
+              type="text"
+              autocomplete="family-name"
+            />
+          </label>
+          <label class="auth-field auth-signup-only" id="auth-grad-field" hidden>
+            <span>Graduation Date</span>
+            <select id="auth-grad-date" name="graduationDate" required>
+              <option value="" disabled selected>Select graduation date</option>
+              <option value="Spring 2027">Spring 2027</option>
+              <option value="Spring 2028">Spring 2028</option>
+              <option value="Spring 2029">Spring 2029</option>
+              <option value="Spring 2030">Spring 2030</option>
+            </select>
+          </label>
+          <label class="auth-field">
+            <span>Email</span>
+            <input
+              id="auth-email"
+              name="email"
+              type="email"
+              autocomplete="email"
+              required
+            />
+          </label>
+          <label class="auth-field">
+            <span>Password</span>
+            <input
+              id="auth-password"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              required
+              minlength="8"
+            />
+          </label>
+          <p class="auth-status" id="auth-status" hidden></p>
+          <div class="auth-footer-row">
+            <button type="button" class="auth-switch-link" id="auth-switch">
+              Need an account? Sign up
+            </button>
+            <button type="submit" class="auth-primary" id="auth-submit">SIGN IN</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="import-modal" id="import-modal" hidden>
+      <div class="import-dialog" role="dialog" aria-labelledby="import-title" aria-modal="true">
+        <h2 id="import-title">Import Queen’s Schedule</h2>
+        <p class="import-copy">
+          Import your SOLUS/onQ calendar for one week. ComCal never asks for your
+          NetID or password.
+        </p>
+        <label class="import-drop" id="import-drop" for="import-file">
+          <input id="import-file" class="import-file" type="file" accept="*/*" />
+          <strong>Upload a screenshot or file</strong>
+          <span>Weekly SOLUS/onQ calendar, photo, .ics, or PDF</span>
+          <em id="import-file-name"></em>
+        </label>
+        <div class="import-preview" id="import-preview" hidden>
+          <img id="import-preview-img" alt="Selected schedule preview" />
+        </div>
+        <p class="import-status" id="import-status" hidden></p>
+        <div class="import-actions">
+          <button type="button" id="import-clear">Clear schedule</button>
+          <button type="button" id="import-cancel">Cancel</button>
+          <button type="button" class="import-primary" id="import-submit">
+            Import
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="event-modal" id="event-modal" hidden>
+      <div class="event-dialog" role="dialog" aria-labelledby="event-title" aria-modal="true">
+        <button type="button" class="event-close" id="event-close" aria-label="Close">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6.4 6.4 17.6 17.6M17.6 6.4 6.4 17.6" />
+          </svg>
+        </button>
+        <input
+          id="event-title"
+          class="event-title-input"
+          type="text"
+          placeholder="Add title"
+        />
+        <div class="event-type-tabs" aria-hidden="true">
+          <span class="is-active">Event</span>
+        </div>
+
+        <div class="event-rows">
+          <div class="event-row">
+            <span class="event-row-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="8.5"/></svg>
+            </span>
+            <div class="event-row-body">
+              <div class="event-chip-row">
+                <input id="event-date" class="event-chip-input" type="date" />
+                <div class="event-time-pair" id="event-times">
+                  <input id="event-start" class="event-chip-input" type="time" />
+                  <span class="event-time-dash">–</span>
+                  <input id="event-end" class="event-chip-input" type="time" />
+                </div>
+              </div>
+              <label class="event-inline-check">
+                <input id="event-allday" type="checkbox" />
+                All day
+              </label>
+              <div class="event-repeat" id="event-repeat-wrap">
+                <button type="button" class="event-repeat-trigger" id="event-repeat-trigger" aria-haspopup="listbox" aria-expanded="false">
+                  <span id="event-repeat-label">Does not repeat</span>
+                  <span aria-hidden="true">▾</span>
+                </button>
+                <input type="hidden" id="event-repeat" value="none" />
+                <ul class="event-repeat-menu" id="event-repeat-menu" role="listbox" hidden></ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="event-row">
+            <span class="event-row-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 21s6-5.2 6-10a6 6 0 1 0-12 0c0 4.8 6 10 6 10z"/><circle cx="12" cy="11" r="2.2"/></svg>
+            </span>
+            <div class="event-row-body">
+              <input id="event-location" class="event-plain-input" type="text" placeholder="Add location" />
+            </div>
+          </div>
+
+          <div class="event-row">
+            <span class="event-row-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M5 7h14M5 12h14M5 17h10"/></svg>
+            </span>
+            <div class="event-row-body">
+              <textarea id="event-description" class="event-plain-input event-desc-input" rows="2" placeholder="Add description"></textarea>
+            </div>
+          </div>
+
+          <div class="event-row">
+            <span class="event-row-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M8 10V7a4 4 0 1 1 8 0v3"/><rect x="5" y="10" width="14" height="10" rx="2"/></svg>
+            </span>
+            <div class="event-row-body">
+              <input id="event-professor" class="event-plain-input" type="text" placeholder="Add professor" />
+            </div>
+          </div>
+
+          <div class="event-row">
+            <span class="event-row-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg>
+            </span>
+            <div class="event-row-body">
+              <div class="topic-picker" id="event-topic-picker">
+                <input type="hidden" id="event-topic" value="" />
+                <button type="button" class="topic-picker-trigger event-chip-input" id="event-topic-trigger" aria-haspopup="listbox" aria-expanded="false">
+                  <span class="topic-picker-swatch" id="event-topic-swatch"></span>
+                  <span class="topic-picker-label" id="event-topic-label">Select calendar</span>
+                  <span class="topic-picker-caret" aria-hidden="true">▾</span>
+                </button>
+                <ul class="topic-picker-menu" id="event-topic-menu" role="listbox" hidden></ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <label class="event-series-check" id="event-series-wrap" hidden>
+          <input id="event-series" type="checkbox" />
+          Update all weekly meetings in this series
+        </label>
+        <p class="event-error" id="event-error" hidden></p>
+        <div class="event-footer">
+          <button type="button" class="event-delete-link" id="event-delete">Delete</button>
+          <button type="button" class="event-save" id="event-save">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="topic-edit-modal" id="topic-edit-modal" hidden>
+      <div class="topic-edit-dialog" role="dialog" aria-labelledby="topic-edit-heading" aria-modal="true">
+        <h2 id="topic-edit-heading">Edit calendar</h2>
+        <label class="event-field">
+          Name
+          <input id="topic-edit-name" type="text" maxlength="40" />
+        </label>
+        <div class="event-field">
+          Colour
+          <div class="topic-color-picker" id="topic-color-picker">
+            <button type="button" class="topic-color-trigger" id="topic-color-trigger" aria-haspopup="true" aria-expanded="false">
+              <span class="topic-color-dot" id="topic-color-dot"></span>
+              <span class="topic-color-caret" aria-hidden="true">▾</span>
+            </button>
+            <div class="topic-color-panel" id="topic-color-panel" hidden>
+              <div class="topic-color-grid" id="topic-color-grid" role="listbox" aria-label="Preset colours"></div>
+              <button type="button" class="topic-color-custom-btn" id="topic-color-custom-btn">
+                Custom…
+              </button>
+              <div class="topic-color-custom" id="topic-color-custom" hidden>
+                <input id="topic-edit-color" type="color" value="#5B8DEF" aria-label="Custom colour wheel" />
+                <span>Pick any colour</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="event-error" id="topic-edit-error" hidden></p>
+        <div class="event-actions">
+          <button type="button" id="topic-edit-delete" hidden>Delete</button>
+          <button type="button" id="topic-edit-cancel">Cancel</button>
+          <button type="button" class="event-save" id="topic-edit-save">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="import-modal" id="grades-edit-modal" hidden>
+      <div class="import-dialog grades-edit-dialog" role="dialog" aria-labelledby="grades-edit-title" aria-modal="true">
+        <h2 id="grades-edit-title">Edit Grades</h2>
+        <p class="import-copy">
+          Add or update courses and letter grades. Use this when a new grade is posted so you
+          don’t need to import your whole transcript again.
+        </p>
+        <div class="grades-edit-table-wrap" id="grades-edit-table"></div>
+        <button type="button" class="grades-edit-add" id="grades-edit-add">+ Add course</button>
+        <p class="import-status" id="grades-edit-status" hidden></p>
+        <div class="import-actions">
+          <button type="button" id="grades-edit-cancel">Cancel</button>
+          <button type="button" class="import-primary" id="grades-edit-save">Save grades</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="import-modal" id="transcript-modal" hidden>
+      <div class="import-dialog" role="dialog" aria-labelledby="transcript-title" aria-modal="true">
+        <h2 id="transcript-title">Import Queen’s Transcript</h2>
+        <p class="import-copy">
+          Upload a SOLUS transcript PDF or screenshot. ComCal reads course codes,
+          units, and letter grades locally — it never asks for your NetID or password.
+        </p>
+        <label class="import-drop" id="transcript-drop" for="transcript-file">
+          <input
+            id="transcript-file"
+            class="import-file"
+            type="file"
+            accept=".pdf,application/pdf,image/*"
+          />
+          <strong>Upload a transcript</strong>
+          <span>Drop a PDF or screenshot here, or click to browse</span>
+          <em id="transcript-file-name"></em>
+        </label>
+        <div class="import-preview" id="transcript-preview" hidden>
+          <img id="transcript-preview-img" alt="Selected transcript preview" />
+        </div>
+        <div class="transcript-review" id="transcript-review" hidden>
+          <p class="transcript-review-copy">
+            Check every <strong>term</strong> and <strong>letter</strong> before saving.
+            PDF line order and screenshot OCR often attach the wrong term (e.g. Fall 2026
+            on a Winter 2025 course) or drop “−” from grades.
+          </p>
+          <div class="transcript-review-table-wrap" id="transcript-review-table"></div>
+          <details class="transcript-raw">
+            <summary>Show extracted text</summary>
+            <pre id="transcript-raw-text"></pre>
+          </details>
+        </div>
+        <p class="import-status" id="transcript-status" hidden></p>
+        <div class="import-actions">
+          <button type="button" id="transcript-clear">Clear grades</button>
+          <button type="button" id="transcript-cancel">Cancel</button>
+          <button type="button" class="import-primary" id="transcript-submit">
+            Import
+          </button>
+          <button type="button" class="import-primary" id="transcript-confirm" hidden>
+            Save grades
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script src="js/auth.js?v=2"></script>
+    <script src="js/app.js?v=11"></script>
+    <script src="js/academic-calendar.js"></script>
+    <script src="js/schedule.js"></script>
+    <script src="js/topics.js?v=5"></script>
+    <script src="js/import.js"></script>
+    <script src="js/curriculum.js?v=5"></script>
+    <script src="js/assignments.js?v=38"></script>
+    <script src="js/calendar.js?v=4"></script>
+    <script src="js/grades.js?v=10"></script>
+    <script src="js/profile.js"></script>
+  </body>
+</html>
