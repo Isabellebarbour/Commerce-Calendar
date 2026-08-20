@@ -309,6 +309,12 @@ function allDayRow(days) {
   const lanes = packAllDayLanes(days);
   const laneCount = Math.max(lanes.length, 1);
   const dayCols = days.length;
+  const columns = days
+    .map(
+      (_, index) =>
+        `<div class="cal-allday-col${index === days.length - 1 ? " is-last" : ""}" style="grid-column:${index + 2};grid-row:1 / span ${laneCount}" aria-hidden="true"></div>`
+    )
+    .join("");
   const chips = lanes
     .flatMap((lane, laneIndex) =>
       lane.map((segment) => {
@@ -325,6 +331,7 @@ function allDayRow(days) {
 
   return `<div class="cal-allday-row" style="--allday-days:${dayCols};--allday-lanes:${laneCount}" aria-label="All-day events">
     <div class="cal-allday-gutter" style="grid-row:1 / span ${laneCount}"><span>All day</span></div>
+    ${columns}
     ${chips}
   </div>`;
 }
