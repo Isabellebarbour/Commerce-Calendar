@@ -915,12 +915,21 @@ async function importScheduleFile(file, onProgress) {
     const fromGrid = window.ComCalSchedule.parseScheduleWords(data.words || [], data.blocks || []);
     // Prefer color-block reads, then full-page word→column mapping, then text/grid fallbacks.
     // Never let header-day OCR alone invent Saturday-only schedules.
-    const templates = window.ComCalSchedule.mergeTemplates(
-      data.blockTemplates || [],
-      data.pageTemplates || [],
-      fromGrid || [],
-      (fromText.templates || []).filter((row) => Number.isFinite(row.weekday))
+    const blockTemplates = data.blockTemplates || [];
+    const namedBlocks = blockTemplates.filter((row) =>
+      /\b(COMM|CISC|MATH|ECON|EMPR|HIST|PHIL|PSYC|BIOL|CHEM|PHYS)\b/i.test(row.title || "")
     );
+    // When green-tile OCR found real course codes, trust those first and only
+    // fill gaps from page/text parses — avoids stacked Class + COMM duplicates.
+    const templates =
+      namedBlocks.length >= 2
+        ? window.ComCalSchedule.mergeTemplates(blockTemplates, data.pageTemplates || [])
+        : window.ComCalSchedule.mergeTemplates(
+            blockTemplates,
+            data.pageTemplates || [],
+            fromGrid || [],
+            (fromText.templates || []).filter((row) => Number.isFinite(row.weekday))
+          );
     parsed = {
       templates,
       meetings: fromText.meetings || [],

@@ -673,16 +673,87 @@ function templatesFromEvents(events) {
   return [...seen.values()];
 }
 
+function templateQuality(template) {
+  const title = String(template?.title || "");
+  let score = 0;
+  if (/\b(COMM|CISC|MATH|ECON|EMPR|HIST|PHIL|PSYC|BIOL|CHEM|PHYS)\b/i.test(title)) score += 12;
+  if (!/^class\b/i.test(title.trim())) score += 4;
+  if (/\b(Lecture|Tutorial|Lab|Seminar|Studio)\b/i.test(title)) score += 2;
+  if (template?.location) score += 2;
+  if (template?.description) score += 1;
+  // Prefer typical Queen’s class lengths (80–100 or ~180 min)
+  const duration = Number(template?.endMinutes) - Number(template?.startMinutes);
+  if (duration >= 70 && duration <= 110) score += 2;
+  if (duration >= 160 && duration <= 200) score += 2;
+  return score;
+}
+
+function templatesOverlap(a, b) {
+  if (Number(a.weekday) !== Number(b.weekday)) return false;
+  const start = Math.max(a.startMinutes, b.startMinutes);
+  const end = Math.min(a.endMinutes, b.endMinutes);
+  const overlap = end - start;
+  if (overlap <= 0) return false;
+  const shorter = Math.min(a.endMinutes - a.startMinutes, b.endMinutes - b.startMinutes);
+  return overlap >= Math.max(25, shorter * 0.45);
+}
+
+function pickBetterTemplate(primary, secondary) {
+  const preferPrimary = templateQuality(primary) >= templateQuality(secondary);
+  const winner = preferPrimary ? primary : secondary;
+  const other = preferPrimary ? secondary : primary;
+  const primaryTitle = String(primary.title || "");
+  const secondaryTitle = String(secondary.title || "");
+  const named =
+    /\b(COMM|CISC|MATH|ECON|EMPR)\b/i.test(primaryTitle)
+      ? primaryTitle
+      : /\b(COMM|CISC|MATH|ECON|EMPR)\b/i.test(secondaryTitle)
+        ? secondaryTitle
+        : winner.title;
+  return {
+    ...winner,
+    title: named || winner.title,
+    location: winner.location || other.location || "",
+    description: winner.description || other.description || "",
+    // Snap to the stronger-named slot's times when both overlap
+    startMinutes: winner.startMinutes,
+    endMinutes: winner.endMinutes,
+  };
+}
+
 function mergeTemplates(...groups) {
-  const seen = new Set();
-  const merged = [];
-  groups.flat().forEach((template) => {
-    const key = `${template.weekday}|${template.startMinutes}|${template.endMinutes}|${template.title.toUpperCase()}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    merged.push(template);
+  const normalized = groups.flat().map((template) => ({
+    ...template,
+    weekday: Number(template.weekday),
+    startMinutes: Math.round(Number(template.startMinutes) / 5) * 5,
+    endMinutes: Math.round(Number(template.endMinutes) / 5) * 5,
+    title: String(template.title || "Class").replace(/\s+/g, " ").trim(),
+    location: String(template.location || "").replace(/\s+/g, " ").trim(),
+    description: String(template.description || "").trim(),
+  }));
+
+  const kept = [];
+  normalized.forEach((template) => {
+    if (!Number.isFinite(template.weekday) || !Number.isFinite(template.startMinutes)) return;
+    if (!(template.endMinutes > template.startMinutes)) return;
+    const rivalIndex = kept.findIndex((other) => templatesOverlap(other, template));
+    if (rivalIndex === -1) {
+      kept.push(template);
+      return;
+    }
+    kept[rivalIndex] = pickBetterTemplate(kept[rivalIndex], template);
   });
-  return merged;
+
+  // Drop leftover generic "Class" rows that still sit on top of a named course.
+  return kept.filter((template, index, list) => {
+    if (!/^class\b/i.test(template.title)) return true;
+    return !list.some(
+      (other, otherIndex) =>
+        otherIndex !== index &&
+        !/^class\b/i.test(other.title) &&
+        templatesOverlap(template, other)
+    );
+  });
 }
 
 function minutesOnDate(date, minutes) {
