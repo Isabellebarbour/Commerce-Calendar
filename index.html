@@ -14,7 +14,7 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lato:wght@400;700;900&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="css/styles.css?v=54" />
+    <link rel="stylesheet" href="css/styles.css?v=55" />
   </head>
   <body class="is-landing">
     <div id="landing" class="landing" aria-label="Welcome">
@@ -73,6 +73,18 @@
 
     <div id="app-shell" class="app-shell" hidden>
     <header class="top-bar">
+      <button
+        type="button"
+        class="nav-toggle"
+        id="nav-toggle"
+        aria-label="Open menu"
+        aria-expanded="false"
+        aria-controls="app-sidebar"
+      >
+        <svg class="nav-toggle-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 7h16M4 12h16M4 17h16" />
+        </svg>
+      </button>
       <img
         class="logo"
         src="assets/logo.png"
@@ -84,7 +96,7 @@
     </header>
 
     <div class="shell">
-      <aside class="sidebar">
+      <aside class="sidebar" id="app-sidebar">
         <nav class="nav" aria-label="Main">
           <button class="nav-item is-active" data-page="home" type="button">
             <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -154,6 +166,8 @@
           <span class="profile-name">Isabelle Barbour</span>
         </button>
       </aside>
+
+      <div class="nav-backdrop" id="nav-backdrop" hidden></div>
 
       <main class="main">
         <section class="page is-active" id="page-home" aria-label="Home">

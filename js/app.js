@@ -13,6 +13,8 @@ function showPage(pageId) {
     button.classList.toggle("is-active", button.dataset.page === pageId);
   });
 
+  closeMobileNav();
+
   if (pageId === "calendar") {
     window.ComCalCalendar?.reload();
   }
@@ -25,6 +27,41 @@ function showPage(pageId) {
   if (pageId === "profile") {
     window.ComCalProfile?.render();
   }
+}
+
+function isMobileNav() {
+  return window.matchMedia("(max-width: 860px)").matches;
+}
+
+function setMobileNavOpen(open) {
+  const shouldOpen = open && isMobileNav();
+  document.body.classList.toggle("is-nav-open", shouldOpen);
+  const toggle = document.getElementById("nav-toggle");
+  const backdrop = document.getElementById("nav-backdrop");
+  if (toggle) {
+    toggle.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
+    toggle.setAttribute("aria-label", shouldOpen ? "Close menu" : "Open menu");
+  }
+  if (backdrop) backdrop.hidden = !shouldOpen;
+}
+
+function closeMobileNav() {
+  setMobileNavOpen(false);
+}
+
+function bindMobileNav() {
+  const toggle = document.getElementById("nav-toggle");
+  const backdrop = document.getElementById("nav-backdrop");
+  toggle?.addEventListener("click", () => {
+    setMobileNavOpen(!document.body.classList.contains("is-nav-open"));
+  });
+  backdrop?.addEventListener("click", closeMobileNav);
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeMobileNav();
+  });
+  window.addEventListener("resize", () => {
+    if (!isMobileNav()) closeMobileNav();
+  });
 }
 
 navButtons.forEach((button) => {
@@ -255,6 +292,7 @@ function bindAuthUi() {
 
 bindAuthUi();
 bindLandingParallax();
+bindMobileNav();
 
 async function bootAuthGate() {
   try {
