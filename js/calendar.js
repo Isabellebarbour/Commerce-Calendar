@@ -248,15 +248,16 @@ function allDaySpanForEvent(event, days) {
 }
 
 function packAllDayLanes(days) {
-  const seen = new Set();
   const segments = [];
 
   visibleCalendarEvents().forEach((event) => {
-    if (!isAllDayCalendarEvent(event) || seen.has(event.id)) return;
+    if (!isAllDayCalendarEvent(event)) return;
     const span = allDaySpanForEvent(event, days);
     if (!span) return;
-    seen.add(event.id);
-    segments.push({ event, ...span });
+    // Keep each all-day chip inside a single day column (no multi-day bars).
+    for (let idx = span.startIdx; idx <= span.endIdx; idx += 1) {
+      segments.push({ event, startIdx: idx, endIdx: idx });
+    }
   });
 
   segments.sort(

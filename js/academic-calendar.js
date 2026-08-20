@@ -30,7 +30,7 @@ function academicTimed(id, title, year, month, day, startHour, startMin, endHour
 
 const ACADEMIC_EVENTS = [
   academicRange("fall-begins", "Fall Term begins", 2026, 9, 1),
-  academicRange("summer-exam-deferral", "Summer Term final exam deferral dates", 2026, 9, 2, 5),
+  academicRange("summer-exam-deferral", "Summer Term final exam deferral dates", 2026, 9, 2),
   academicRange("fall-classes-begin", "Fall Term classes begin", 2026, 9, 8),
   academicRange("fall-add-deadline", "Last date to add Fall Term and multi-term classes", 2026, 9, 21),
   academicRange(
