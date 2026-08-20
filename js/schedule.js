@@ -704,14 +704,20 @@ function isGenericClassTitle(title) {
 
 /** Overlap, or a Class stub sitting under a named course (split SOLUS green tiles). */
 function templatesShouldMerge(a, b) {
-  if (templatesOverlap(a, b)) return true;
   if (Number(a.weekday) !== Number(b.weekday)) return false;
+  if (templatesOverlap(a, b)) return true;
+
   const aClass = isGenericClassTitle(a.title);
   const bClass = isGenericClassTitle(b.title);
   if (aClass === bClass) return false;
+
+  // Any real overlap with a Class stub is enough (location strips are short).
+  const overlap = Math.min(a.endMinutes, b.endMinutes) - Math.max(a.startMinutes, b.startMinutes);
+  if (overlap >= 10) return true;
+
   const named = aClass ? b : a;
   const stub = aClass ? a : b;
-  // Location strip is the lower part of the same tile: starts at/near the course block's end.
+  // Location strip under the course tile: starts at/near the course block's end.
   const gapAfterNamed = stub.startMinutes - named.endMinutes;
   return gapAfterNamed >= -15 && gapAfterNamed <= 25;
 }
@@ -795,18 +801,21 @@ function eventsNearOrOverlap(a, b) {
   const aEnd = new Date(a.end).getTime();
   const bStart = new Date(b.start).getTime();
   const bEnd = new Date(b.end).getTime();
-  if (aStart < bEnd && bStart < aEnd) {
-    const overlap = Math.min(aEnd, bEnd) - Math.max(aStart, bStart);
-    const shorter = Math.min(aEnd - aStart, bEnd - bStart);
-    return overlap >= Math.max(5 * 60 * 1000, shorter * 0.35);
-  }
   const aClass = isGenericClassTitle(a.title);
   const bClass = isGenericClassTitle(b.title);
-  if (aClass === bClass) return false;
-  const namedEnd = aClass ? bEnd : aEnd;
-  const stubStart = aClass ? aStart : bStart;
-  const gapAfterNamed = stubStart - namedEnd;
-  return gapAfterNamed >= -15 * 60 * 1000 && gapAfterNamed <= 25 * 60 * 1000;
+  const overlapMs = Math.min(aEnd, bEnd) - Math.max(aStart, bStart);
+
+  if (aClass !== bClass) {
+    if (overlapMs >= 5 * 60 * 1000) return true;
+    const namedEnd = aClass ? bEnd : aEnd;
+    const stubStart = aClass ? aStart : bStart;
+    const gapAfterNamed = stubStart - namedEnd;
+    return gapAfterNamed >= -15 * 60 * 1000 && gapAfterNamed <= 25 * 60 * 1000;
+  }
+
+  if (overlapMs <= 0) return false;
+  const shorter = Math.min(aEnd - aStart, bEnd - bStart);
+  return overlapMs >= Math.max(25 * 60 * 1000, shorter * 0.45);
 }
 
 /**
