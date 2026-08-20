@@ -698,6 +698,24 @@ function templatesOverlap(a, b) {
   return overlap >= Math.max(25, shorter * 0.45);
 }
 
+function isGenericClassTitle(title) {
+  return /^class\b/i.test(String(title || "").trim());
+}
+
+/** Overlap, or a Class stub sitting under a named course (split SOLUS green tiles). */
+function templatesShouldMerge(a, b) {
+  if (templatesOverlap(a, b)) return true;
+  if (Number(a.weekday) !== Number(b.weekday)) return false;
+  const aClass = isGenericClassTitle(a.title);
+  const bClass = isGenericClassTitle(b.title);
+  if (aClass === bClass) return false;
+  const named = aClass ? b : a;
+  const stub = aClass ? a : b;
+  // Location strip is the lower part of the same tile: starts at/near the course block's end.
+  const gapAfterNamed = stub.startMinutes - named.endMinutes;
+  return gapAfterNamed >= -15 && gapAfterNamed <= 25;
+}
+
 function pickBetterTemplate(primary, secondary) {
   const preferPrimary = templateQuality(primary) >= templateQuality(secondary);
   const winner = preferPrimary ? primary : secondary;
@@ -710,14 +728,19 @@ function pickBetterTemplate(primary, secondary) {
       : /\b(COMM|CISC|MATH|ECON|EMPR)\b/i.test(secondaryTitle)
         ? secondaryTitle
         : winner.title;
+  const involvesClass = isGenericClassTitle(primaryTitle) || isGenericClassTitle(secondaryTitle);
   return {
     ...winner,
     title: named || winner.title,
     location: winner.location || other.location || "",
     description: winner.description || other.description || "",
-    // Snap to the stronger-named slot's times when both overlap
-    startMinutes: winner.startMinutes,
-    endMinutes: winner.endMinutes,
+    // Split location tiles: take the full vertical span. Otherwise keep the stronger slot.
+    startMinutes: involvesClass
+      ? Math.min(primary.startMinutes, secondary.startMinutes)
+      : winner.startMinutes,
+    endMinutes: involvesClass
+      ? Math.max(primary.endMinutes, secondary.endMinutes)
+      : winner.endMinutes,
   };
 }
 
@@ -736,7 +759,7 @@ function mergeTemplates(...groups) {
   normalized.forEach((template) => {
     if (!Number.isFinite(template.weekday) || !Number.isFinite(template.startMinutes)) return;
     if (!(template.endMinutes > template.startMinutes)) return;
-    const rivalIndex = kept.findIndex((other) => templatesOverlap(other, template));
+    const rivalIndex = kept.findIndex((other) => templatesShouldMerge(other, template));
     if (rivalIndex === -1) {
       kept.push(template);
       return;
@@ -746,14 +769,105 @@ function mergeTemplates(...groups) {
 
   // Drop leftover generic "Class" rows that still sit on top of a named course.
   return kept.filter((template, index, list) => {
-    if (!/^class\b/i.test(template.title)) return true;
+    if (!isGenericClassTitle(template.title)) return true;
     return !list.some(
       (other, otherIndex) =>
         otherIndex !== index &&
-        !/^class\b/i.test(other.title) &&
-        templatesOverlap(template, other)
+        !isGenericClassTitle(other.title) &&
+        templatesShouldMerge(template, other)
     );
   });
+}
+
+function sameLocalDayIso(a, b) {
+  const left = new Date(a);
+  const right = new Date(b);
+  return (
+    left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth() &&
+    left.getDate() === right.getDate()
+  );
+}
+
+function eventsNearOrOverlap(a, b) {
+  if (!sameLocalDayIso(a.start, b.start)) return false;
+  const aStart = new Date(a.start).getTime();
+  const aEnd = new Date(a.end).getTime();
+  const bStart = new Date(b.start).getTime();
+  const bEnd = new Date(b.end).getTime();
+  if (aStart < bEnd && bStart < aEnd) {
+    const overlap = Math.min(aEnd, bEnd) - Math.max(aStart, bStart);
+    const shorter = Math.min(aEnd - aStart, bEnd - bStart);
+    return overlap >= Math.max(5 * 60 * 1000, shorter * 0.35);
+  }
+  const aClass = isGenericClassTitle(a.title);
+  const bClass = isGenericClassTitle(b.title);
+  if (aClass === bClass) return false;
+  const namedEnd = aClass ? bEnd : aEnd;
+  const stubStart = aClass ? aStart : bStart;
+  const gapAfterNamed = stubStart - namedEnd;
+  return gapAfterNamed >= -15 * 60 * 1000 && gapAfterNamed <= 25 * 60 * 1000;
+}
+
+/**
+ * Fold generic "Class" + location stubs into the overlapping/adjacent named course event.
+ * Fixes already-saved imports where SOLUS tiles split into two calendar blocks.
+ */
+function coalesceClassLocationStubs(events) {
+  if (!Array.isArray(events) || events.length < 2) return events || [];
+  const next = events.map((event) => ({ ...event }));
+  const drop = new Set();
+
+  for (let i = 0; i < next.length; i += 1) {
+    if (drop.has(i)) continue;
+    const left = next[i];
+    if (
+      left.allDay ||
+      left.source === "academic" ||
+      left.source === "assignment" ||
+      left.source === "exam"
+    ) {
+      continue;
+    }
+
+    for (let j = i + 1; j < next.length; j += 1) {
+      if (drop.has(j)) continue;
+      const right = next[j];
+      if (
+        right.allDay ||
+        right.source === "academic" ||
+        right.source === "assignment" ||
+        right.source === "exam"
+      ) {
+        continue;
+      }
+
+      const leftGeneric = isGenericClassTitle(left.title);
+      const rightGeneric = isGenericClassTitle(right.title);
+      if (leftGeneric === rightGeneric) continue;
+      if (!eventsNearOrOverlap(left, right)) continue;
+
+      const namedIndex = leftGeneric ? j : i;
+      const stubIndex = leftGeneric ? i : j;
+      const named = next[namedIndex];
+      const stub = next[stubIndex];
+      const start = new Date(Math.min(new Date(named.start).getTime(), new Date(stub.start).getTime()));
+      const end = new Date(Math.max(new Date(named.end).getTime(), new Date(stub.end).getTime()));
+
+      next[namedIndex] = {
+        ...named,
+        location: named.location || stub.location || "",
+        description: named.description || stub.description || "",
+        start: start.toISOString(),
+        end: end.toISOString(),
+      };
+      drop.add(stubIndex);
+      if (drop.has(i)) break;
+    }
+  }
+
+  if (!drop.size) return events;
+  return next.filter((_, index) => !drop.has(index));
 }
 
 function minutesOnDate(date, minutes) {
@@ -812,9 +926,10 @@ function formatTemplateSummary(templates) {
 
 function allEvents() {
   const academic = window.ComCalAcademic?.events || [];
-  const raw = [...academic, ...loadScheduleEvents()].sort(
-    (a, b) => new Date(a.start) - new Date(b.start)
-  );
+  const stored = loadScheduleEvents();
+  const schedule = coalesceClassLocationStubs(stored);
+  if (schedule !== stored) saveScheduleEvents(schedule);
+  const raw = [...academic, ...schedule].sort((a, b) => new Date(a.start) - new Date(b.start));
   return window.ComCalTopics ? window.ComCalTopics.decorate(raw) : raw;
 }
 
@@ -854,6 +969,7 @@ window.ComCalSchedule = {
   templatesFromEvents,
   oneOffEvents,
   mergeTemplates,
+  coalesceClassLocationStubs,
   expandTemplatesToTerm,
   looksLikeSessionalDates,
   formatTemplateSummary,

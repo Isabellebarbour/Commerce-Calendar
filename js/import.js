@@ -882,7 +882,9 @@ function buildImportedSchedule(parsed) {
     .filter(Boolean);
   const term =
     window.ComCalAcademic.termForDates(sampleDates) || window.ComCalAcademic.currentOrNextTerm();
-  const events = window.ComCalSchedule.expandTemplatesToTerm(templates, term, oneOffs);
+  const events = window.ComCalSchedule.coalesceClassLocationStubs(
+    window.ComCalSchedule.expandTemplatesToTerm(templates, term, oneOffs)
+  );
   if (!events.length) {
     throw new Error("Found classes, but none could be placed in the current term.");
   }
