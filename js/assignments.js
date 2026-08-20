@@ -16,24 +16,18 @@ const QUEENS_LETTERS = [
   { min: 0, letter: "F" },
 ];
 
-const DEFAULT_COURSES = [
-  {
-    id: "comm-101",
-    code: "COMM 101",
-    name: "Introduction to Commerce",
-    items: [
-      item("Academics 101", "2026-09-22", null, 1.5, 100),
-      item("Individual Written Assignment", "2026-10-04", null, 5, 80),
-      item("Midterm", "2026-10-07", "2026-10-13", 10, 77),
-      item("Team Work Plan", "2026-11-08", null, 5, 100),
-      item("Executive Summary", "2026-11-17", null, 2, 85),
-      item("Team Case Assignment", "2026-11-17", null, 10, 77),
-      item("CAC Badge", "2026-12-01", null, 1.5, 0),
-      item("Engagement Activities", null, null, 5, 100),
-      item("Final Exam", null, null, 10, 82),
-    ],
-  },
-];
+/** Old demo rows that were shipped as defaults — strip so every user starts blank. */
+const LEGACY_SEED_TITLES = new Set([
+  "Academics 101",
+  "Individual Written Assignment",
+  "Midterm",
+  "Team Work Plan",
+  "Executive Summary",
+  "Team Case Assignment",
+  "CAC Badge",
+  "Engagement Activities",
+  "Final Exam",
+]);
 
 function asgnFilterState() {
   return (window.__comcalAsgnFilters ||= { year: 1, courseId: "all" });
@@ -80,11 +74,34 @@ function loadAssignments() {
   try {
     const raw = JSON.parse(localStorage.getItem(ASGN_STORAGE) || "null");
     const courses = (raw?.courses || []).map(normalizeCourse).filter(Boolean);
-    if (courses.length) return { ...raw, courses };
+    if (courses.length) {
+      const cleaned = stripLegacySeedItems({ ...raw, courses });
+      return cleaned;
+    }
   } catch {
-    /* use defaults */
+    /* empty start */
   }
-  return { courses: structuredClone(DEFAULT_COURSES) };
+  return { courses: [] };
+}
+
+function stripLegacySeedItems(state) {
+  let changed = false;
+  (state.courses || []).forEach((course) => {
+    if (normalizeCode(course.code) !== "COMM 101") return;
+    if (!Array.isArray(course.items) || !course.items.length) return;
+    const titles = new Set(course.items.map((row) => String(row.title || "").trim()));
+    // Only strip when the old demo pack is present
+    if (!titles.has("Academics 101") && !titles.has("CAC Badge")) return;
+    const next = course.items.filter((row) => !LEGACY_SEED_TITLES.has(String(row.title || "").trim()));
+    if (next.length !== course.items.length) {
+      course.items = next;
+      changed = true;
+    }
+  });
+  if (changed) {
+    localStorage.setItem(ASGN_STORAGE, JSON.stringify(state));
+  }
+  return state;
 }
 
 function saveAssignments() {
