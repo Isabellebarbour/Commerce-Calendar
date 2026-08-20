@@ -503,12 +503,10 @@ yearButtons.forEach((button) => {
 function markCurriculumFromSchedule(events) {
   currState = loadCurriculum();
   const required = [];
-  const electives = [];
 
   Object.values(CURRICULUM).forEach((year) => {
     year.items.forEach((item) => {
       if (item.type === "course") required.push(item);
-      else electives.push(item);
     });
   });
 
@@ -523,32 +521,10 @@ function markCurriculumFromSchedule(events) {
 
   codes.forEach((code) => {
     const course = required.find((item) => item.code === code);
-    if (course) {
-      const entry = getEntry(course.id);
-      if (entry.status === "incomplete") {
-        setEntry(course.id, { status: "planned" });
-        planned += 1;
-      }
-      return;
-    }
-
-    const alreadyFilled = electives.some((item) =>
-      Array.from({ length: slotCount(item.units) }, (_, index) => getElectiveEntry(`${item.id}-${index}`)).some(
-        (entry) => (entry.code || "").toUpperCase() === code
-      )
-    );
-    if (alreadyFilled) return;
-
-    const slot = electives
-      .flatMap((item) =>
-        Array.from({ length: slotCount(item.units) }, (_, index) => ({
-          id: `${item.id}-${index}`,
-        }))
-      )
-      .find((item) => !electiveFilled(getElectiveEntry(item.id)));
-
-    if (slot) {
-      setEntry(slot.id, { status: "planned", code, name: "" });
+    if (!course) return;
+    const entry = getEntry(course.id);
+    if (entry.status === "incomplete") {
+      setEntry(course.id, { status: "planned" });
       planned += 1;
     }
   });
@@ -556,6 +532,32 @@ function markCurriculumFromSchedule(events) {
   renderYear();
   updateSummary();
   return { courses: codes.size, planned };
+}
+
+/** Remove schedule auto-fills that dumped COMM courses into elective / non-commerce slots. */
+function clearBadElectiveAutofills() {
+  let changed = false;
+  Object.values(CURRICULUM).forEach((year) => {
+    year.items.forEach((item) => {
+      if (item.type !== "elective") return;
+      const nonCommerce = /\bnon-commerce\b/i.test(item.name) && !/commerce or non-commerce/i.test(item.name);
+      for (let i = 0; i < slotCount(item.units); i += 1) {
+        const id = `${item.id}-${i}`;
+        const entry = currState[id];
+        if (!entry) continue;
+        const code = String(entry.code || "").trim();
+        const name = String(entry.name || "").trim();
+        const autoFilled = entry.status === "planned" && code && !name;
+        const commInNonCommerce = nonCommerce && /^COMM\b/i.test(code);
+        if (autoFilled || commInNonCommerce) {
+          delete currState[id];
+          changed = true;
+        }
+      }
+    });
+  });
+  if (changed) saveCurriculum();
+  return changed;
 }
 
 function getProgress() {
@@ -619,6 +621,7 @@ window.ComCalCurriculum = {
   reload() {
     currState = loadCurriculum();
     migrateElectives();
+    clearBadElectiveAutofills();
     updateSummary();
     renderYear();
     window.ComCalProfile?.render();
@@ -643,5 +646,6 @@ function migrateElectives() {
 }
 
 migrateElectives();
+clearBadElectiveAutofills();
 updateSummary();
 renderYear();
